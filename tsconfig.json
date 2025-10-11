@@ -3,16 +3,37 @@
     "target": "ESNext",
     "module": "ESNext",
     "jsx": "react-jsx",
-    "moduleResolution": "node",
+    "moduleResolution": "nodenext",
     "allowJs": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
     "baseUrl": ".",
-    "paths": {}
+    "paths": {
+      "~/*": [
+        "./src/*"
+      ]
+    },
+    "types": [
+      "expo-router/globals"
+    ]
   },
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "eas.json",
+    ".expo"
+  ],
+  "include": [
+    "./**/*.ts",
+    "./**/*.tsx",
+    "expo.d.ts"
   ],
   "extends": "expo/tsconfig.base"
 }

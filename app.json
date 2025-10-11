@@ -29,6 +29,11 @@
       "eas": {
         "projectId": "local-dev-build"
       }
-    }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-asset"
+    ]
   }
 }
