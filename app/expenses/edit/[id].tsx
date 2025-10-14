@@ -1,11 +1,19 @@
-// app/expenses/add.tsx
-import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
+// app/expenses/edit/[id].tsx
+import React, { useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Platform
+} from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
-import { useRouter } from 'expo-router';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useExpenseStore } from '../../src/stores/useExpenseStore';
-import { generateId } from '../../src/utils/formatters';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useExpenseStore } from '../../../src/stores/useExpenseStore';
+import type { Expense } from '../../../src/types/expense';
+
+const CATEGORIES = ['Food', 'Transport', 'College', 'Books', 'Snacks', 'Other'];
 
 type FormValues = {
   amount: string;
@@ -14,20 +22,46 @@ type FormValues = {
   date: string;
 };
 
-const CATEGORIES = ['Food', 'Transport', 'College', 'Books', 'Snacks', 'Other'];
-
-export default function AddExpenseScreen() {
+export default function EditExpenseScreen(): React.JSX.Element {
   const router = useRouter();
-  const addExpense = useExpenseStore((s) => s.addExpense);
+  const { id } = useLocalSearchParams() as { id?: string };
+  const getById = useExpenseStore((s) => s.getById);
+  const updateExpense = useExpenseStore((s) => s.updateExpense);
 
-  const { control, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const expense: Expense | undefined = id ? getById(String(id)) : undefined;
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors }
+  } = useForm<FormValues>({
     defaultValues: {
       amount: '',
       category: 'Food',
       note: '',
-      date: new Date().toISOString(),
-    },
+      date: new Date().toISOString()
+    }
   });
+
+  useEffect(() => {
+    if (expense) {
+      reset({
+        amount: String(expense.amount),
+        category: expense.category,
+        note: expense.note ?? '',
+        date: expense.date
+      });
+    }
+  }, [expense, reset]);
+
+  if (!expense) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.missing}>Expense not found.</Text>
+      </View>
+    );
+  }
 
   const onSubmit = (data: FormValues) => {
     const amountNum = Number(data.amount);
@@ -36,24 +70,19 @@ export default function AddExpenseScreen() {
       return;
     }
 
-    const now = new Date();
-    const expense = {
-      id: generateId(),
+    updateExpense(expense.id, {
       amount: Math.round(amountNum),
       category: data.category,
       note: data.note?.trim(),
-      date: new Date(data.date).toISOString(),
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
+      date: new Date(data.date).toISOString()
+    });
 
-    addExpense(expense);
     router.replace('/expenses');
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Add Expense</Text>
+      <Text style={styles.title}>Edit Expense</Text>
 
       <View style={styles.field}>
         <Text style={styles.label}>Amount (₹)</Text>
@@ -71,7 +100,6 @@ export default function AddExpenseScreen() {
             />
           )}
         />
-        {errors.amount && <Text style={styles.err}>Amount is required</Text>}
       </View>
 
       <View style={styles.field}>
@@ -97,12 +125,17 @@ export default function AddExpenseScreen() {
       </View>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Date</Text>
+        <Text style={styles.label}>Date (ISO or any date text)</Text>
         <Controller
           control={control}
           name="date"
           render={({ field: { onChange, value } }) => (
-            <DateWrapper value={value} onChange={onChange} />
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              placeholder="e.g. 2025-10-12T00:00:00.000Z or 12/10/2025"
+              style={styles.input}
+            />
           )}
         />
       </View>
@@ -119,32 +152,8 @@ export default function AddExpenseScreen() {
       </View>
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSubmit(onSubmit)}>
-        <Text style={styles.saveText}>Save</Text>
+        <Text style={styles.saveText}>Save changes</Text>
       </TouchableOpacity>
-    </View>
-  );
-}
-
-function DateWrapper({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const date = new Date(value);
-  const [show, setShow] = React.useState(false);
-
-  return (
-    <View>
-      <TouchableOpacity onPress={() => setShow(true)} style={styles.input}>
-        <Text>{date.toLocaleDateString()}</Text>
-      </TouchableOpacity>
-      {show && (
-        <DateTimePicker
-          value={date}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(_, selected) => {
-            setShow(false);
-            if (selected) onChange(selected.toISOString());
-          }}
-        />
-      )}
     </View>
   );
 }
@@ -152,16 +161,16 @@ function DateWrapper({ value, onChange }: { value: string; onChange: (v: string)
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#F3F4F6' },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  missing: { padding: 16 },
   field: { marginBottom: 12 },
   label: { fontSize: 13, color: '#374151', marginBottom: 6 },
   input: {
     backgroundColor: '#fff',
     padding: 12,
     borderRadius: 10,
-    fontSize: 16,
+    fontSize: 16
   },
   inputError: { borderWidth: 1, borderColor: '#ff4444' },
-  err: { color: '#ff4444', marginTop: 6 },
   pickerRow: { flexDirection: 'row', flexWrap: 'wrap' as const },
   catChip: {
     paddingVertical: 8,
@@ -169,7 +178,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#fff',
     marginRight: 8,
-    marginBottom: 8,
+    marginBottom: 8
   },
   catChipActive: { backgroundColor: '#3751FF' },
   catText: { color: '#111' },
@@ -179,7 +188,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#3751FF',
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: 'center'
   },
-  saveText: { color: '#fff', fontWeight: '700' },
+  saveText: { color: '#fff', fontWeight: '700' }
 });
