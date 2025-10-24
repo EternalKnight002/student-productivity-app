@@ -45,53 +45,153 @@ export default function NotesEditor(): React.ReactElement {
     }
   }, [existing?.id]);
 
-  const pickImage = async (): Promise<void> => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission required', 'Please allow photo access to attach images.');
-        return;
-      }
+  // const pickImage = async (): Promise<void> => {
+  //   try {
+  //     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  //     if (!permission.granted) {
+  //       Alert.alert('Permission required', 'Please allow photo access to attach images.');
+  //       return;
+  //     }
 
-      const result: ImagePicker.ImagePickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 1,
-      });
+  //     const result: ImagePicker.ImagePickerResult = await ImagePicker.launchImageLibraryAsync({
+  //       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+  //       allowsEditing: false,
+  //       quality: 1,
+  //     });
 
-      // handle both new and legacy shapes
-      if ((result as any).cancelled || (result as any).canceled) return;
+  //     // handle both new and legacy shapes
+  //     if ((result as any).cancelled || (result as any).canceled) return;
 
-      const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
-      if (!localUri) {
-        Alert.alert('Error', 'Could not read the selected image.');
-        return;
-      }
+  //     const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
+  //     if (!localUri) {
+  //       Alert.alert('Error', 'Could not read the selected image.');
+  //       return;
+  //     }
 
-      setIsProcessingImage(true);
+  //     setIsProcessingImage(true);
 
-      // Resize & compress: cap longest side by 1200px and compress to 0.7
-      // We use resize by width:1200 which will be ignored if smaller than original.
-      const manipResult = await ImageManipulator.manipulateAsync(
-        localUri,
-        [{ resize: { width: 1200 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-      );
+  //     // Resize & compress: cap longest side by 1200px and compress to 0.7
+  //     // We use resize by width:1200 which will be ignored if smaller than original.
+  //     const manipResult = await ImageManipulator.manipulateAsync(
+  //       localUri,
+  //       [{ resize: { width: 1200 } }],
+  //       { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+  //     );
 
-      const processedUri = manipResult.uri;
+  //     const processedUri = manipResult.uri;
 
-      // ensure base dir
-      const baseDir: string | null = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory ?? null;
-      if (!baseDir) {
-        Alert.alert('Unsupported platform', 'File storage is unavailable on this platform.');
-        setIsProcessingImage(false);
-        return;
-      }
+  //     // ensure base dir
+  //     const baseDir: string | null = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory ?? null;
+  //     if (!baseDir) {
+  //       Alert.alert('Unsupported platform', 'File storage is unavailable on this platform.');
+  //       setIsProcessingImage(false);
+  //       return;
+  //     }
 
+  //     const extension = processedUri.split('.').pop() ?? 'jpg';
+  //     const filename = `${nanoid()}.${extension}`;
+  //     const notesDir = `${baseDir}notes/`;
+  //     const dest = `${notesDir}${filename}`;
+
+  //     // ensure folder exists
+  //     const folderInfo = await FileSystem.getInfoAsync(notesDir);
+  //     if (!folderInfo.exists) {
+  //       await FileSystem.makeDirectoryAsync(notesDir, { intermediates: true });
+  //     }
+
+  //     // copy processed image to app dir
+  //     await FileSystem.copyAsync({ from: processedUri, to: dest });
+
+  //     const mimeType = 'image/jpeg';
+  //     // const attachmentPayload: Omit<NoteAttachment, 'id' | 'createdAt'> & { uri: string } = {
+  //     //   uri: dest,
+  //     //   mimeType,
+  //     // };
+
+  //     // if (existing?.id) {
+  //     //   await addAttachment(existing.id, attachmentPayload);
+  //     //   const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
+  //     //   setAttachments(updatedNote?.attachments ?? []);
+  //     // } else {
+  //     //   const temp: NoteAttachment = { id: nanoid(), uri: dest, mimeType: attachmentPayload.mimeType, createdAt: new Date().toISOString() };
+  //     //   setAttachments(prev => [...prev, temp]);
+  //     // }
+  //     const attachmentPayloadForStore: Omit<NoteAttachment, 'id'> & { uri: string } = {
+  //         uri: dest,
+  //         mimeType,
+  //         createdAt: new Date().toISOString(),
+  //       };
+
+  //       if (existing?.id) {
+  //         await addAttachment(existing.id, attachmentPayloadForStore);
+  //         const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
+  //         setAttachments(updatedNote?.attachments ?? []);
+  //       } else {
+  //         const temp: NoteAttachment = { id: nanoid(), uri: dest, mimeType: attachmentPayloadForStore.mimeType, createdAt: attachmentPayloadForStore.createdAt };
+  //         setAttachments(prev => [...prev, temp]);
+  //       }
+
+  //   } catch (e) {
+  //     console.warn('pickImage error', e);
+  //     Alert.alert('Error', 'Could not attach image.');
+  //   } finally {
+  //     setIsProcessingImage(false);
+  //   }
+  // };
+    const pickImage = async (): Promise<void> => {
+  try {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Please allow photo access to attach images.');
+      return;
+    }
+
+    const result: ImagePicker.ImagePickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    // handle both new and legacy shapes
+    if ((result as any).cancelled || (result as any).canceled) return;
+
+    const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
+    if (!localUri) {
+      Alert.alert('Error', 'Could not read the selected image.');
+      return;
+    }
+
+    setIsProcessingImage(true);
+
+    // Resize & compress: cap longest side by 1200px and compress to 0.7
+    const manipResult = await ImageManipulator.manipulateAsync(
+      localUri,
+      [{ resize: { width: 1200 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    const processedUri = manipResult.uri;
+
+    // --- Robust file storage handling ---
+    // Try documentDirectory first, then cacheDirectory. If neither is available,
+    // fall back to using the processedUri directly (no copy).
+    const docDir = (FileSystem as any).documentDirectory ?? null;
+    const cacheDir = (FileSystem as any).cacheDirectory ?? null;
+    const baseDirFallback: string | null = docDir ?? cacheDir ?? null;
+
+    // Useful debug logs — remove or comment out later
+    console.log('pickImage: FS.documentDirectory =', docDir);
+    console.log('pickImage: FS.cacheDirectory =', cacheDir);
+    console.log('pickImage: processedUri =', processedUri);
+
+    let dest: string;
+    let usedCopy = false;
+
+    if (baseDirFallback) {
       const extension = processedUri.split('.').pop() ?? 'jpg';
       const filename = `${nanoid()}.${extension}`;
-      const notesDir = `${baseDir}notes/`;
-      const dest = `${notesDir}${filename}`;
+      const notesDir = `${baseDirFallback}notes/`;
+      dest = `${notesDir}${filename}`;
 
       // ensure folder exists
       const folderInfo = await FileSystem.getInfoAsync(notesDir);
@@ -101,43 +201,43 @@ export default function NotesEditor(): React.ReactElement {
 
       // copy processed image to app dir
       await FileSystem.copyAsync({ from: processedUri, to: dest });
-
-      const mimeType = 'image/jpeg';
-      // const attachmentPayload: Omit<NoteAttachment, 'id' | 'createdAt'> & { uri: string } = {
-      //   uri: dest,
-      //   mimeType,
-      // };
-
-      // if (existing?.id) {
-      //   await addAttachment(existing.id, attachmentPayload);
-      //   const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
-      //   setAttachments(updatedNote?.attachments ?? []);
-      // } else {
-      //   const temp: NoteAttachment = { id: nanoid(), uri: dest, mimeType: attachmentPayload.mimeType, createdAt: new Date().toISOString() };
-      //   setAttachments(prev => [...prev, temp]);
-      // }
-      const attachmentPayloadForStore: Omit<NoteAttachment, 'id'> & { uri: string } = {
-          uri: dest,
-          mimeType,
-          createdAt: new Date().toISOString(),
-        };
-
-        if (existing?.id) {
-          await addAttachment(existing.id, attachmentPayloadForStore);
-          const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
-          setAttachments(updatedNote?.attachments ?? []);
-        } else {
-          const temp: NoteAttachment = { id: nanoid(), uri: dest, mimeType: attachmentPayloadForStore.mimeType, createdAt: attachmentPayloadForStore.createdAt };
-          setAttachments(prev => [...prev, temp]);
-        }
-
-    } catch (e) {
-      console.warn('pickImage error', e);
-      Alert.alert('Error', 'Could not attach image.');
-    } finally {
-      setIsProcessingImage(false);
+      usedCopy = true;
+      console.log('pickImage: copied processed image to', dest);
+    } else {
+      // fallback: use the processedUri directly (works in Expo Go / some dev flows)
+      dest = processedUri;
+      console.warn('pickImage: document/cache directory not available; using processedUri directly. dest=', dest);
     }
-  };
+
+    const mimeType = 'image/jpeg';
+
+    const attachmentPayloadForStore: Omit<NoteAttachment, 'id'> & { uri: string } = {
+      uri: dest,
+      mimeType,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existing?.id) {
+      await addAttachment(existing.id, attachmentPayloadForStore);
+      const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
+      setAttachments(updatedNote?.attachments ?? []);
+    } else {
+      const temp: NoteAttachment = {
+        id: nanoid(),
+        uri: attachmentPayloadForStore.uri,
+        mimeType: attachmentPayloadForStore.mimeType,
+        createdAt: attachmentPayloadForStore.createdAt,
+      };
+      setAttachments(prev => [...prev, temp]);
+    }
+  } catch (e) {
+    console.warn('pickImage error', e);
+    Alert.alert('Error', 'Could not attach image.');
+  } finally {
+    setIsProcessingImage(false);
+  }
+};
+
 
   const handleSave = async (): Promise<void> => {
     try {

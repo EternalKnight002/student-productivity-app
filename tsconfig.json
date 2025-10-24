@@ -13,9 +13,14 @@
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": [
+        "./src/*"
+      ]
     },
-    "types": ["react", "react-native"]
+    "types": [
+      "react",
+      "react-native"
+    ]
   },
   "exclude": [
     "node_modules",
@@ -25,6 +30,10 @@
     "eas.json",
     ".expo"
   ],
-  "include": ["./**/*.ts", "./**/*.tsx", "expo.d.ts"],
+  "include": [
+    "./**/*.ts",
+    "./**/*.tsx",
+    "expo.d.ts"
+  ],
   "extends": "expo/tsconfig.base"
 }
