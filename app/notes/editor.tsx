@@ -1,5 +1,5 @@
 // app/notes/editor.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, TextInput, Button, StyleSheet, Text, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -9,6 +9,9 @@ import { useNotesStore } from '../../src/stores/useNotesStore';
 import { ImageGrid } from '../../src/components/ImageGrid';
 import { Note, NoteAttachment } from '../../src/types/note';
 import { nanoid } from 'nanoid/non-secure';
+
+// NEW: import the RichTextEditor component and its ref type
+import RichTextEditor, { RichTextEditorRef } from '../../src/components/RichTextEditor';
 
 type Params = {
   id?: string;
@@ -32,6 +35,9 @@ export default function NotesEditor(): React.ReactElement {
   const [attachments, setAttachments] = useState<NoteAttachment[]>(existing?.attachments ?? []);
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
 
+  // ref for editor control
+  const editorRef = useRef<RichTextEditorRef | null>(null);
+
   useEffect(() => {
     // ensure store has loaded
     loadStore();
@@ -45,210 +51,125 @@ export default function NotesEditor(): React.ReactElement {
     }
   }, [existing?.id]);
 
-  // const pickImage = async (): Promise<void> => {
-  //   try {
-  //     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  //     if (!permission.granted) {
-  //       Alert.alert('Permission required', 'Please allow photo access to attach images.');
-  //       return;
-  //     }
-
-  //     const result: ImagePicker.ImagePickerResult = await ImagePicker.launchImageLibraryAsync({
-  //       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-  //       allowsEditing: false,
-  //       quality: 1,
-  //     });
-
-  //     // handle both new and legacy shapes
-  //     if ((result as any).cancelled || (result as any).canceled) return;
-
-  //     const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
-  //     if (!localUri) {
-  //       Alert.alert('Error', 'Could not read the selected image.');
-  //       return;
-  //     }
-
-  //     setIsProcessingImage(true);
-
-  //     // Resize & compress: cap longest side by 1200px and compress to 0.7
-  //     // We use resize by width:1200 which will be ignored if smaller than original.
-  //     const manipResult = await ImageManipulator.manipulateAsync(
-  //       localUri,
-  //       [{ resize: { width: 1200 } }],
-  //       { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-  //     );
-
-  //     const processedUri = manipResult.uri;
-
-  //     // ensure base dir
-  //     const baseDir: string | null = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory ?? null;
-  //     if (!baseDir) {
-  //       Alert.alert('Unsupported platform', 'File storage is unavailable on this platform.');
-  //       setIsProcessingImage(false);
-  //       return;
-  //     }
-
-  //     const extension = processedUri.split('.').pop() ?? 'jpg';
-  //     const filename = `${nanoid()}.${extension}`;
-  //     const notesDir = `${baseDir}notes/`;
-  //     const dest = `${notesDir}${filename}`;
-
-  //     // ensure folder exists
-  //     const folderInfo = await FileSystem.getInfoAsync(notesDir);
-  //     if (!folderInfo.exists) {
-  //       await FileSystem.makeDirectoryAsync(notesDir, { intermediates: true });
-  //     }
-
-  //     // copy processed image to app dir
-  //     await FileSystem.copyAsync({ from: processedUri, to: dest });
-
-  //     const mimeType = 'image/jpeg';
-  //     // const attachmentPayload: Omit<NoteAttachment, 'id' | 'createdAt'> & { uri: string } = {
-  //     //   uri: dest,
-  //     //   mimeType,
-  //     // };
-
-  //     // if (existing?.id) {
-  //     //   await addAttachment(existing.id, attachmentPayload);
-  //     //   const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
-  //     //   setAttachments(updatedNote?.attachments ?? []);
-  //     // } else {
-  //     //   const temp: NoteAttachment = { id: nanoid(), uri: dest, mimeType: attachmentPayload.mimeType, createdAt: new Date().toISOString() };
-  //     //   setAttachments(prev => [...prev, temp]);
-  //     // }
-  //     const attachmentPayloadForStore: Omit<NoteAttachment, 'id'> & { uri: string } = {
-  //         uri: dest,
-  //         mimeType,
-  //         createdAt: new Date().toISOString(),
-  //       };
-
-  //       if (existing?.id) {
-  //         await addAttachment(existing.id, attachmentPayloadForStore);
-  //         const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
-  //         setAttachments(updatedNote?.attachments ?? []);
-  //       } else {
-  //         const temp: NoteAttachment = { id: nanoid(), uri: dest, mimeType: attachmentPayloadForStore.mimeType, createdAt: attachmentPayloadForStore.createdAt };
-  //         setAttachments(prev => [...prev, temp]);
-  //       }
-
-  //   } catch (e) {
-  //     console.warn('pickImage error', e);
-  //     Alert.alert('Error', 'Could not attach image.');
-  //   } finally {
-  //     setIsProcessingImage(false);
-  //   }
-  // };
-    const pickImage = async (): Promise<void> => {
-  try {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission required', 'Please allow photo access to attach images.');
-      return;
-    }
-
-    const result: ImagePicker.ImagePickerResult = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 1,
-    });
-
-    // handle both new and legacy shapes
-    if ((result as any).cancelled || (result as any).canceled) return;
-
-    const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
-    if (!localUri) {
-      Alert.alert('Error', 'Could not read the selected image.');
-      return;
-    }
-
-    setIsProcessingImage(true);
-
-    // Resize & compress: cap longest side by 1200px and compress to 0.7
-    const manipResult = await ImageManipulator.manipulateAsync(
-      localUri,
-      [{ resize: { width: 1200 } }],
-      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-    );
-
-    const processedUri = manipResult.uri;
-
-    // --- Robust file storage handling ---
-    // Try documentDirectory first, then cacheDirectory. If neither is available,
-    // fall back to using the processedUri directly (no copy).
-    const docDir = (FileSystem as any).documentDirectory ?? null;
-    const cacheDir = (FileSystem as any).cacheDirectory ?? null;
-    const baseDirFallback: string | null = docDir ?? cacheDir ?? null;
-
-    // Useful debug logs — remove or comment out later
-    console.log('pickImage: FS.documentDirectory =', docDir);
-    console.log('pickImage: FS.cacheDirectory =', cacheDir);
-    console.log('pickImage: processedUri =', processedUri);
-
-    let dest: string;
-    let usedCopy = false;
-
-    if (baseDirFallback) {
-      const extension = processedUri.split('.').pop() ?? 'jpg';
-      const filename = `${nanoid()}.${extension}`;
-      const notesDir = `${baseDirFallback}notes/`;
-      dest = `${notesDir}${filename}`;
-
-      // ensure folder exists
-      const folderInfo = await FileSystem.getInfoAsync(notesDir);
-      if (!folderInfo.exists) {
-        await FileSystem.makeDirectoryAsync(notesDir, { intermediates: true });
+  /**
+   * pickImage
+   * - picks, resizes, compresses and copies the image into app storage (if available)
+   * - adds attachment to store (if editing existing note) or to local attachments (if new)
+   * - RETURNS the saved URI (string) on success, or null if cancelled / failed
+   *
+   * This function no longer inserts into the editor directly. The editor's toolbar
+   * will call this via onExternalImagePick and handle insertion itself.
+   */
+  const pickImage = async (): Promise<string | null> => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted && permission.status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo access to attach images.');
+        return null;
       }
 
-      // copy processed image to app dir
-      await FileSystem.copyAsync({ from: processedUri, to: dest });
-      usedCopy = true;
-      console.log('pickImage: copied processed image to', dest);
-    } else {
-      // fallback: use the processedUri directly (works in Expo Go / some dev flows)
-      dest = processedUri;
-      console.warn('pickImage: document/cache directory not available; using processedUri directly. dest=', dest);
-    }
+      const result: ImagePicker.ImagePickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
 
-    const mimeType = 'image/jpeg';
+      // handle both new and legacy shapes
+      if ((result as any).cancelled || (result as any).canceled) return null;
 
-    const attachmentPayloadForStore: Omit<NoteAttachment, 'id'> & { uri: string } = {
-      uri: dest,
-      mimeType,
-      createdAt: new Date().toISOString(),
-    };
+      const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
+      if (!localUri) {
+        Alert.alert('Error', 'Could not read the selected image.');
+        return null;
+      }
 
-    if (existing?.id) {
-      await addAttachment(existing.id, attachmentPayloadForStore);
-      const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
-      setAttachments(updatedNote?.attachments ?? []);
-    } else {
-      const temp: NoteAttachment = {
-        id: nanoid(),
-        uri: attachmentPayloadForStore.uri,
-        mimeType: attachmentPayloadForStore.mimeType,
-        createdAt: attachmentPayloadForStore.createdAt,
+      setIsProcessingImage(true);
+
+      // Resize & compress: cap longest side by 1200px and compress to 0.7
+      const manipResult = await ImageManipulator.manipulateAsync(
+        localUri,
+        [{ resize: { width: 1200 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      const processedUri = manipResult.uri;
+
+      // --- Robust file storage handling ---
+      const docDir = (FileSystem as any).documentDirectory ?? null;
+      const cacheDir = (FileSystem as any).cacheDirectory ?? null;
+      const baseDirFallback: string | null = docDir ?? cacheDir ?? null;
+
+      let dest: string;
+
+      if (baseDirFallback) {
+        const extension = processedUri.split('.').pop() ?? 'jpg';
+        const filename = `${nanoid()}.${extension}`;
+        const notesDir = `${baseDirFallback}notes/`;
+        dest = `${notesDir}${filename}`;
+
+        // ensure folder exists
+        const folderInfo = await FileSystem.getInfoAsync(notesDir);
+        if (!folderInfo.exists) {
+          await FileSystem.makeDirectoryAsync(notesDir, { intermediates: true });
+        }
+
+        // copy processed image to app dir
+        await FileSystem.copyAsync({ from: processedUri, to: dest });
+      } else {
+        // fallback: use the processedUri directly (works in Expo Go / some dev flows)
+        dest = processedUri;
+        console.warn('pickImage: document/cache directory not available; using processedUri directly. dest=', dest);
+      }
+
+      const mimeType = 'image/jpeg';
+
+      const attachmentPayloadForStore: Omit<NoteAttachment, 'id'> & { uri: string } = {
+        uri: dest,
+        mimeType,
+        createdAt: new Date().toISOString(),
       };
-      setAttachments(prev => [...prev, temp]);
-    }
-  } catch (e) {
-    console.warn('pickImage error', e);
-    Alert.alert('Error', 'Could not attach image.');
-  } finally {
-    setIsProcessingImage(false);
-  }
-};
 
+      if (existing?.id) {
+        // persist attachment for existing note
+        await addAttachment(existing.id, attachmentPayloadForStore);
+        const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
+        setAttachments(updatedNote?.attachments ?? []);
+      } else {
+        // temporary attachment for new note (persist when saving the note)
+        const temp: NoteAttachment = {
+          id: nanoid(),
+          uri: attachmentPayloadForStore.uri,
+          mimeType: attachmentPayloadForStore.mimeType,
+          createdAt: attachmentPayloadForStore.createdAt,
+        };
+        setAttachments(prev => [...prev, temp]);
+      }
+
+      // Return the saved URI so the editor can insert it inline
+      return dest;
+    } catch (e) {
+      console.warn('pickImage error', e);
+      Alert.alert('Error', 'Could not attach image.');
+      return null;
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
 
   const handleSave = async (): Promise<void> => {
     try {
+      // pull latest HTML from editor (if available). Fallback to local body state
+      const htmlFromEditor = await editorRef.current?.getHTML();
+      const finalBody = (htmlFromEditor ?? body) as string;
+
       if (existing?.id) {
-        await updateNote(existing.id, { title, body });
+        await updateNote(existing.id, { title, body: finalBody });
         router.back();
         return;
       }
       const created = await addNote({
         title,
-        body,
+        body: finalBody,
         attachments: attachments.map(a => ({ id: a.id, uri: a.uri, mimeType: a.mimeType, createdAt: a.createdAt })),
       } as Partial<Note>);
       router.replace(`/notes/note/${created.id}`);
@@ -274,7 +195,19 @@ export default function NotesEditor(): React.ReactElement {
       <TextInput value={title} onChangeText={(v: string) => setTitle(v)} placeholder="Note title" style={styles.input} />
 
       <Text style={[styles.label, { marginTop: 12 }]}>Body</Text>
-      <TextInput value={body} onChangeText={(v: string) => setBody(v)} placeholder="Write something..." style={[styles.input, { minHeight: 120 }]} multiline />
+
+      {/* use RichTextEditor and pass pickImage as external handler */}
+      <View style={{ minHeight: 200, borderRadius: 8, overflow: 'hidden' }}>
+        <RichTextEditor
+          ref={editorRef}
+          initialHTML={body}
+          onChange={(html) => setBody(html)}
+          placeholder="Write something..."
+          autoFocus={false}
+          onExternalImagePick={pickImage}
+          externalImageProcessing={isProcessingImage} /* <-- pass processing flag here */
+        />
+      </View>
 
       <Text style={[styles.label, { marginTop: 12 }]}>Attachments</Text>
       <ImageGrid attachments={attachments} onRemove={handleRemoveAttachment} />
@@ -286,7 +219,27 @@ export default function NotesEditor(): React.ReactElement {
         </View>
       ) : (
         <View style={{ marginTop: 12 }}>
-          <Button title="Add Image" onPress={pickImage} />
+          {/* Keep this button for picking images outside the editor toolbar (it uses same flow).
+              Now it will also insert the image into the editor after pickImage returns the URI. */}
+          <Button
+            title="Add Image"
+            onPress={async () => {
+              try {
+                const uri = await pickImage();
+                if (uri) {
+                  // insert into editor so user sees inline placement
+                  try {
+                    await editorRef.current?.insertImage(uri);
+                  } catch {
+                    // fallback to inserting HTML img tag
+                    await editorRef.current?.insertHTML(`<img src="${uri}" style="max-width:100%;height:auto;" />`);
+                  }
+                }
+              } catch (e) {
+                console.warn('Add Image button error', e);
+              }
+            }}
+          />
         </View>
       )}
 
