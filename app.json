@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Student Productivity App",
+    "slug": "student-productivity-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.studentproductivity.app"
+    },
+    "web": {},
+    "updates": {
+      "enabled": false,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "eas": {
+        "projectId": "local-dev-build"
+      }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-asset"
+    ]
+  }
+}
