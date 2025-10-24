@@ -1,6 +1,6 @@
 // app/expenses/index.tsx
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useExpenseStore } from '../../src/stores/useExpenseStore';
 import ExpenseItem from '../../src/components/ExpenseItem';
@@ -22,18 +22,60 @@ export default function ExpensesListScreen(): React.ReactElement {
     ]);
   };
 
+  // FAB menu state + animation
   const [open, setOpen] = useState<boolean>(false);
+  const anim = React.useRef(new Animated.Value(0)).current;
 
-  const toggleMenu = () => setOpen((v) => !v);
+  const toggleMenu = () => {
+    const toValue = open ? 0 : 1;
+    Animated.timing(anim, {
+      toValue,
+      duration: 180,
+      easing: Easing.out(Easing.circle),
+      useNativeDriver: true,
+    }).start();
+    setOpen(!open);
+  };
 
   const addPress = () => {
-    setOpen(false);
+    toggleMenu();
     router.push('/expenses/add');
   };
 
   const analyticsPress = () => {
-    setOpen(false);
+    toggleMenu();
     router.push('/analytics');
+  };
+
+  // animated styles for the two mini buttons
+  const addStyle = {
+    transform: [
+      {
+        scale: anim,
+      },
+      {
+        translateY: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -70],
+        }),
+      },
+    ],
+    opacity: anim,
+  };
+
+  const analyticsStyle = {
+    transform: [
+      {
+        scale: anim,
+      },
+      {
+        translateY: anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -130],
+        }),
+      },
+    ],
+    opacity: anim,
   };
 
   return (
@@ -61,25 +103,23 @@ export default function ExpensesListScreen(): React.ReactElement {
         contentContainerStyle={{ paddingVertical: 8 }}
       />
 
-      {/* FAB menu - simple (no animation) */}
+      {/* FAB menu */}
       <View style={styles.fabContainer} pointerEvents="box-none">
-        {open && (
-          <>
-            <View style={[styles.miniBtnWrapper, { bottom: 130 }]}>
-              <TouchableOpacity style={styles.miniBtn} onPress={analyticsPress} activeOpacity={0.85}>
-                <Text style={styles.miniTxt}>📊</Text>
-              </TouchableOpacity>
-              <View style={styles.miniLabel}><Text style={styles.miniLabelText}>Analytics</Text></View>
-            </View>
+        {/* Analytics mini button */}
+        <Animated.View style={[styles.miniBtnWrapper, analyticsStyle]}>
+          <TouchableOpacity style={[styles.miniBtn]} onPress={analyticsPress} activeOpacity={0.85}>
+            <Text style={styles.miniTxt}>📊</Text>
+          </TouchableOpacity>
+          <View style={styles.miniLabel}><Text style={styles.miniLabelText}>Analytics</Text></View>
+        </Animated.View>
 
-            <View style={[styles.miniBtnWrapper, { bottom: 70 }]}>
-              <TouchableOpacity style={styles.miniBtn} onPress={addPress} activeOpacity={0.85}>
-                <Text style={styles.miniTxt}>＋</Text>
-              </TouchableOpacity>
-              <View style={styles.miniLabel}><Text style={styles.miniLabelText}>Add</Text></View>
-            </View>
-          </>
-        )}
+        {/* Add mini button */}
+        <Animated.View style={[styles.miniBtnWrapper, addStyle]}>
+          <TouchableOpacity style={[styles.miniBtn]} onPress={addPress} activeOpacity={0.85}>
+            <Text style={styles.miniTxt}>＋</Text>
+          </TouchableOpacity>
+          <View style={styles.miniLabel}><Text style={styles.miniLabelText}>Add</Text></View>
+        </Animated.View>
 
         {/* Main FAB */}
         <TouchableOpacity style={styles.fab} onPress={toggleMenu} activeOpacity={0.85}>
@@ -109,7 +149,6 @@ const styles = StyleSheet.create({
     bottom: 30,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    zIndex: 999,
   },
 
   fab: {
@@ -120,6 +159,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   fabText: { color: '#fff', fontSize: 28, lineHeight: 28 },
 
@@ -137,6 +180,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   miniTxt: { fontSize: 22 },
 
