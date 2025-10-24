@@ -10,9 +10,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true
     },
@@ -24,11 +22,6 @@
       "enabled": false,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
-    },
-    "extra": {
-      "eas": {
-        "projectId": "local-dev-build"
-      }
     },
     "plugins": [
       "expo-font",
