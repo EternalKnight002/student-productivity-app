@@ -1,28 +1,53 @@
 // app/expenses/index.tsx
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  SafeAreaView,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { useExpenseStore } from '../../src/stores/useExpenseStore';
+import theme from '../../src/theme';
+import Card from '../../src/components/Card';
+import Chip from '../../src/components/Chip';
 import ExpenseItem from '../../src/components/ExpenseItem';
+import { useExpenseStore } from '../../src/stores/useExpenseStore';
 import { formatCurrency } from '../../src/utils/formatters';
+
+const CATEGORY_ORDER = [
+  { key: 'all', label: 'all' },
+  { key: 'Food', label: 'Food' },
+  { key: 'Transport', label: 'Transport' },
+  { key: 'College', label: 'College' },
+  { key: 'Books', label: 'Books' },
+  { key: 'Snacks', label: 'Snacks' },
+  { key: 'Other', label: 'Other' },
+];
 
 export default function ExpensesListScreen(): React.ReactElement {
   const router = useRouter();
-  const { expenses, deleteExpense } = useExpenseStore((s) => ({
-    expenses: s.expenses,
-    deleteExpense: s.deleteExpense,
-  }));
 
-  const total = useMemo(() => expenses.reduce((acc, e) => acc + e.amount, 0), [expenses]);
+  // Pull commonly used store API (we'll still call other methods defensively if they exist)
+  const store: any = useExpenseStore((s: any) => s);
 
-  const confirmDelete = (id: string) => {
-    Alert.alert('Delete expense?', 'This action cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteExpense(id) },
-    ]);
-  };
+  // Keep direct reactive slices simple
+  const expenses = Array.isArray(store?.expenses) ? store.expenses : [];
+
+  const total = useMemo(
+    () => (Array.isArray(expenses) ? expenses.reduce((acc: number, e: any) => acc + (Number(e.amount) || 0), 0) : 0),
+    [expenses],
+  );
 
   const [open, setOpen] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  const filtered = useMemo(() => {
+    if (!Array.isArray(expenses)) return [];
+    if (selectedCategory === 'all') return expenses;
+    return expenses.filter((e: any) => (e.category ?? 'Other') === selectedCategory);
+  }, [expenses, selectedCategory]);
 
   const toggleMenu = () => setOpen((v) => !v);
 
@@ -36,32 +61,131 @@ export default function ExpensesListScreen(): React.ReactElement {
     router.push('/analytics');
   };
 
+  // ---------- Store adapter helpers (defensive) ----------
+  const callDelete = useCallback(
+    (id: string) => {
+      if (!id) return;
+      // prefer common method names
+      if (typeof store.deleteExpense === 'function') return store.deleteExpense(id);
+      if (typeof store.removeExpense === 'function') return store.removeExpense(id);
+      if (typeof store.delete === 'function') return store.delete(id);
+      // fallback: filter and set
+      if (typeof store.setExpenses === 'function') {
+        store.setExpenses((prev: any[]) => (Array.isArray(prev) ? prev.filter((it) => it.id !== id) : []));
+        return;
+      }
+      // last-resort: mutate an array if exposed
+      if (Array.isArray(store.expenses) && Array.isArray(store.setExpenses)) {
+        store.setExpenses(store.expenses.filter((it: any) => it.id !== id));
+      }
+    },
+    [store],
+  );
+
+  const callAdd = useCallback(
+    (item: any) => {
+      if (!item) return;
+      if (typeof store.addExpense === 'function') return store.addExpense(item);
+      if (typeof store.create === 'function') return store.create(item);
+      if (typeof store.upsert === 'function') return store.upsert(item);
+      if (typeof store.setExpenses === 'function') {
+        store.setExpenses((prev: any[]) => ([item, ...(Array.isArray(prev) ? prev : [])]));
+        return;
+      }
+    },
+    [store],
+  );
+
+  const callArchive = useCallback(
+    (id: string) => {
+      if (!id) return;
+      // prefer dedicated method
+      if (typeof store.archiveExpense === 'function') return store.archiveExpense(id);
+      // try update
+      if (typeof store.updateExpense === 'function') return store.updateExpense(id, { archived: true });
+      // try generic upsert
+      if (typeof store.upsert === 'function') return store.upsert({ id, archived: true });
+      // fallback: mutate the array to set archived flag
+      if (typeof store.setExpenses === 'function') {
+        store.setExpenses((prev: any[]) =>
+          (Array.isArray(prev) ? prev.map((it) => (it.id === id ? { ...it, archived: true } : it)) : prev),
+        );
+        return;
+      }
+      // final fallback: warn
+      console.warn('No archive method found on store; please implement archiveExpense/updateExpense/upsert or setExpenses.');
+    },
+    [store],
+  );
+
+  // ---------- Handlers passed to ExpenseItem ----------
+  const handleDelete = (id: string) => {
+    callDelete(id);
+  };
+
+  const handleArchive = (id: string) => {
+    callArchive(id);
+  };
+
+  const handleUndo = (item: any) => {
+    callAdd(item);
+  };
+
+  // ---------- Render ----------
+  const renderItem = ({ item }: { item: any }) => (
+    <ExpenseItem
+      item={item}
+      onPress={() => router.push(`/expenses/edit/${item.id}`)}
+      onDelete={(id: string) => handleDelete(id)}
+      onArchive={(id: string) => handleArchive(id)}
+      onUndo={(it: any) => handleUndo(it)}
+    />
+  );
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.title}>Expenses</Text>
         <Text style={styles.total}>{formatCurrency(total)}</Text>
       </View>
 
-      <FlatList
-        data={expenses}
-        keyExtractor={(i) => i.id}
-        renderItem={({ item }) => (
-          <ExpenseItem
-            item={item}
-            onPress={() => router.push(`/expenses/edit/${item.id}`)}
-            onDelete={() => confirmDelete(item.id)}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No expenses yet. Tap + to add one.</Text>
-          </View>
-        }
-        contentContainerStyle={{ paddingVertical: 8 }}
-      />
+      <View style={styles.container}>
+        <Card style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Summary</Text>
+          <Text style={styles.summarySubtitle}>{filtered.length} item{filtered.length === 1 ? '' : 's'}</Text>
+        </Card>
 
-      {/* FAB menu - simple (no animation) */}
+        <View style={styles.chipsRow}>
+          <FlatList
+            horizontal
+            data={CATEGORY_ORDER}
+            keyExtractor={(c) => c.key}
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <Chip
+                label={item.label}
+                selected={selectedCategory === item.key}
+                onPress={() => setSelectedCategory(item.key)}
+              />
+            )}
+          />
+        </View>
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(i) => i.id ?? String(Math.random())}
+          renderItem={renderItem}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>No expenses yet. Tap + to add one.</Text>
+            </View>
+          }
+          contentContainerStyle={{ paddingBottom: 140 }}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+
+      {/* FAB menu */}
       <View style={styles.fabContainer} pointerEvents="box-none">
         {open && (
           <>
@@ -81,42 +205,48 @@ export default function ExpensesListScreen(): React.ReactElement {
           </>
         )}
 
-        {/* Main FAB */}
-        <TouchableOpacity style={styles.fab} onPress={toggleMenu} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.fab} onPress={toggleMenu} activeOpacity={0.85} accessibilityRole="button">
           <Text style={styles.fabText}>{open ? '✕' : '＋'}</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  safe: { flex: 1, backgroundColor: theme.colors.background },
+  container: { flex: 1, paddingHorizontal: theme.spacing.lg },
   header: {
-    padding: 16,
-    backgroundColor: '#fff',
-    paddingTop: 28,
-    paddingBottom: 18,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,
+    backgroundColor: theme.colors.background,
   },
-  title: { fontSize: 22, fontWeight: '700' },
-  total: { marginTop: 6, fontSize: 18, color: '#0F766E', fontWeight: '700' },
+  title: { ...theme.typography.h1, color: theme.colors.text },
+  total: { marginTop: 6, fontSize: 18, color: theme.colors.accent, fontWeight: '700' },
+
+  summaryCard: { marginBottom: theme.spacing.md },
+  summaryTitle: { ...theme.typography.h2, color: theme.colors.text },
+  summarySubtitle: { ...theme.typography.body, color: theme.colors.muted },
+
+  chipsRow: { marginBottom: theme.spacing.md },
+
   empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#6B7280' },
+  emptyText: { color: theme.colors.muted },
 
   fabContainer: {
     position: 'absolute',
-    right: 20,
-    bottom: 30,
+    right: theme.spacing.lg,
+    bottom: theme.spacing.lg,
     alignItems: 'center',
-    justifyContent: 'flex-end',
     zIndex: 999,
   },
 
   fab: {
-    height: 60,
-    width: 60,
-    borderRadius: 30,
-    backgroundColor: '#3751FF',
+    height: theme.sizes.fab,
+    width: theme.sizes.fab,
+    borderRadius: theme.sizes.fab / 2,
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
@@ -133,7 +263,7 @@ const styles = StyleSheet.create({
     height: 48,
     width: 48,
     borderRadius: 24,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
@@ -145,5 +275,13 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginLeft: 8,
   },
-  miniLabelText: { backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, overflow: 'hidden', fontSize: 13, color: '#111' },
+  miniLabelText: {
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    overflow: 'hidden',
+    fontSize: 13,
+    color: theme.colors.text,
+  },
 });

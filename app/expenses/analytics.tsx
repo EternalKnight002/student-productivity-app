@@ -1,4 +1,4 @@
-// app/analytics/index.tsx
+// app/expenses/analytics.tsx
 import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
@@ -8,6 +8,7 @@ import {
   FlatList,
   TouchableOpacity,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import theme from '../../src/theme';
 import AnalyticsCard from '../../src/components/AnalyticsCard';
 import Card from '../../src/components/Card';
@@ -26,8 +27,9 @@ function getRecentMonths(count = 6) {
   return out;
 }
 
-export default function AnalyticsScreen() {
-  const store: any = useExpenseStore((s: any) => s);
+export default function ExpensesAnalyticsScreen() {
+  const router = useRouter();
+  const store: any = useExpenseStore((s: any) => s); // defensive grab of store API
   const expensesRaw: any[] = Array.isArray(store?.expenses) ? store.expenses : [];
 
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
