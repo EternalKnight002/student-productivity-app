@@ -29,6 +29,7 @@ import theme from '../theme';
  * - onDelete(id)
  * - onArchive(id)
  * - onUndo(item)  <-- optional, called when user taps Undo after delete
+ * - testID?: string
  */
 type Expense = {
   id: string;
@@ -36,13 +37,14 @@ type Expense = {
   category?: string;
   note?: string;
   date?: string;
+  archived?: boolean;
 };
 
 interface Props {
   item: Expense;
   onPress?: (item: Expense) => void;
-  onDelete?: (id: string) => void;
-  onArchive?: (id: string) => void;
+  onDelete?: (id: string) => void | Promise<void>;
+  onArchive?: (id: string) => void | Promise<void>;
   onUndo?: (item: Expense) => void;
   testID?: string;
 }
@@ -74,29 +76,45 @@ export default function ExpenseItem({
     onPress?.(item);
   };
 
-  const doDelete = () => {
-    // close the swipeable
-    swipeRef.current?.close();
-    // show snackbar
-    setSnackVisible(true);
-    // call delete immediately (parent should remove from store)
-    onDelete?.(item.id);
+  const doDelete = async () => {
+    try {
+      // close the swipeable immediately for visual feedback
+      swipeRef.current?.close();
+      // show snackbar
+      setSnackVisible(true);
 
-    // hide after 6s automatically
-    snackTimerRef.current = (setTimeout(() => {
-      setSnackVisible(false);
-      snackTimerRef.current = null;
-    }, 6000) as unknown) as number;
+      // call delete handler, support both sync and async handlers
+      const r = onDelete?.(item.id);
+      if (r && typeof (r as any).then === 'function') {
+        await r;
+      }
+    } catch (err) {
+      console.error('ExpenseItem.doDelete error:', err);
+    } finally {
+      // hide after 6s automatically (if still visible)
+      if (snackTimerRef.current) {
+        clearTimeout(snackTimerRef.current);
+      }
+      snackTimerRef.current = (setTimeout(() => {
+        setSnackVisible(false);
+        snackTimerRef.current = null;
+      }, 6000) as unknown) as number;
+    }
   };
 
-  const doArchive = () => {
-    swipeRef.current?.close();
-    onArchive?.(item.id);
-    // optional: small ephemeral feedback — use RN Animated scale or just ignore
+  const doArchive = async () => {
+    try {
+      swipeRef.current?.close();
+      const r = onArchive?.(item.id);
+      if (r && typeof (r as any).then === 'function') {
+        await r;
+      }
+    } catch (err) {
+      console.error('ExpenseItem.doArchive error:', err);
+    }
   };
 
   const handleUndo = () => {
-    // clear timer
     if (snackTimerRef.current) {
       clearTimeout(snackTimerRef.current);
       snackTimerRef.current = null;
@@ -206,7 +224,6 @@ function UndoSnackbar({ onUndo, onDismiss }: { onUndo: () => void; onDismiss?: (
       RNAnimated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }),
     ]).start();
     return () => {
-      // on unmount, animate out quickly
       RNAnimated.parallel([
         RNAnimated.timing(translateY, { toValue: 80, duration: 160, useNativeDriver: true }),
         RNAnimated.timing(opacity, { toValue: 0, duration: 160, useNativeDriver: true }),

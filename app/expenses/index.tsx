@@ -56,27 +56,53 @@ export default function ExpensesListScreen(): React.ReactElement {
     router.push('/expenses/add');
   };
 
+  // Navigate to the analytics screen (explicit path)
   const analyticsPress = () => {
     setOpen(false);
-    router.push('/analytics');
+    router.push('/expenses/analytics');
   };
 
   // ---------- Store adapter helpers (defensive) ----------
   const callDelete = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (!id) return;
-      // prefer common method names
-      if (typeof store.deleteExpense === 'function') return store.deleteExpense(id);
-      if (typeof store.removeExpense === 'function') return store.removeExpense(id);
-      if (typeof store.delete === 'function') return store.delete(id);
-      // fallback: filter and set
-      if (typeof store.setExpenses === 'function') {
-        store.setExpenses((prev: any[]) => (Array.isArray(prev) ? prev.filter((it) => it.id !== id) : []));
-        return;
-      }
-      // last-resort: mutate an array if exposed
-      if (Array.isArray(store.expenses) && Array.isArray(store.setExpenses)) {
-        store.setExpenses(store.expenses.filter((it: any) => it.id !== id));
+      try {
+        // prefer common method names and await when returned value is a promise
+        if (typeof store.deleteExpense === 'function') {
+          const r = store.deleteExpense(id);
+          if (r && typeof r.then === 'function') await r;
+          else return;
+        }
+        if (typeof store.removeExpense === 'function') {
+          const r = store.removeExpense(id);
+          if (r && typeof r.then === 'function') await r;
+          else return;
+        }
+        if (typeof store.delete === 'function') {
+          const r = store.delete(id);
+          if (r && typeof r.then === 'function') await r;
+          else return;
+        }
+        // fallback: if there's a setExpenses helper, use it
+        if (typeof store.setExpenses === 'function') {
+          store.setExpenses((prev: any[]) => (Array.isArray(prev) ? prev.filter((it) => it.id !== id) : []));
+          return;
+        }
+        // final fallback: try to call a load() function to refresh the store if available
+        if (typeof store.load === 'function') {
+          await store.load();
+          return;
+        }
+      } catch (err) {
+        console.error('callDelete error:', err);
+        // try best-effort reload
+        if (typeof store.load === 'function') {
+          try {
+            await store.load();
+          } catch (e) {
+            console.error('reload after delete error:', e);
+          }
+        }
       }
     },
     [store],
@@ -119,8 +145,16 @@ export default function ExpensesListScreen(): React.ReactElement {
   );
 
   // ---------- Handlers passed to ExpenseItem ----------
-  const handleDelete = (id: string) => {
-    callDelete(id);
+  const handleDelete = async (id: string) => {
+    await callDelete(id);
+    // ensure UI refresh - attempt load if store exposes it
+    if (typeof store.load === 'function') {
+      try {
+        await store.load();
+      } catch (e) {
+        console.error('store.load after delete failed:', e);
+      }
+    }
   };
 
   const handleArchive = (id: string) => {
@@ -150,10 +184,12 @@ export default function ExpensesListScreen(): React.ReactElement {
       </View>
 
       <View style={styles.container}>
-        <Card style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Summary</Text>
-          <Text style={styles.summarySubtitle}>{filtered.length} item{filtered.length === 1 ? '' : 's'}</Text>
-        </Card>
+        <TouchableOpacity activeOpacity={0.85} onPress={analyticsPress}>
+          <Card style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Summary</Text>
+            <Text style={styles.summarySubtitle}>{filtered.length} item{filtered.length === 1 ? '' : 's'}</Text>
+          </Card>
+        </TouchableOpacity>
 
         <View style={styles.chipsRow}>
           <FlatList

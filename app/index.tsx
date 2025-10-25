@@ -28,7 +28,7 @@ import Card from "../src/components/Card";
  * Paste this as: app/index.tsx
  */
 
-const APP_VERSION = "0.1.0";
+// const APP_VERSION = "0.1.0";
 
 type Feature = {
   key: string;
@@ -208,7 +208,7 @@ export default function Home(): React.ReactElement {
 
         {/* small version text */}
         <View style={styles.versionWrap}>
-          <Text style={[styles.versionText, { color: muted }]}>v{APP_VERSION}</Text>
+          {/* <Text style={[styles.versionText, { color: muted }]}>v{APP_VERSION}</Text> */}
         </View>
       </Animated.View>
     </SafeAreaView>

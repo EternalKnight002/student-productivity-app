@@ -5,6 +5,17 @@ import { useNotesStore } from '../../src/stores/useNotesStore';
 import { useRouter } from 'expo-router';
 import { Note } from '../../src/types/note';
 
+// Helper function to strip HTML tags and get plain text
+function stripHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>.*?<\/style>/gi, '') // Remove style tags
+    .replace(/<script[^>]*>.*?<\/script>/gi, '') // Remove script tags
+    .replace(/<[^>]+>/g, '') // Remove all HTML tags
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .trim();
+}
+
 export default function NotesListScreen(): React.ReactElement {
   const router = useRouter();
   const { notes, load } = useNotesStore(state => ({ notes: state.notes, load: state.load }));
@@ -15,13 +26,19 @@ export default function NotesListScreen(): React.ReactElement {
 
   const sorted = [...notes].sort((a, b) => Number(new Date(b.updatedAt ?? b.createdAt)) - Number(new Date(a.updatedAt ?? a.createdAt)));
 
-  const renderItem: ListRenderItem<Note> = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => router.push(`/notes/note/${item.id}`)}>
-      <Text style={styles.cardTitle}>{item.title || 'Untitled'}</Text>
-      <Text numberOfLines={2} style={styles.cardBody}>{item.body}</Text>
-      {item.attachments?.length ? <Text style={styles.attachCount}>📷 {item.attachments.length}</Text> : null}
-    </TouchableOpacity>
-  );
+  const renderItem: ListRenderItem<Note> = ({ item }) => {
+    const plainTextBody = stripHtml(item.body || '');
+    
+    return (
+      <TouchableOpacity style={styles.card} onPress={() => router.push(`/notes/note/${item.id}`)}>
+        <Text style={styles.cardTitle}>{item.title || 'Untitled'}</Text>
+        {plainTextBody ? (
+          <Text numberOfLines={2} style={styles.cardBody}>{plainTextBody}</Text>
+        ) : null}
+        {item.attachments?.length ? <Text style={styles.attachCount}>📷 {item.attachments.length}</Text> : null}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
