@@ -9,8 +9,6 @@ import { useNotesStore } from '../../src/stores/useNotesStore';
 import { ImageGrid } from '../../src/components/ImageGrid';
 import { Note, NoteAttachment } from '../../src/types/note';
 import { nanoid } from 'nanoid/non-secure';
-
-// NEW: import the RichTextEditor component and its ref type
 import RichTextEditor, { RichTextEditorRef } from '../../src/components/RichTextEditor';
 
 type Params = {
@@ -35,11 +33,9 @@ export default function NotesEditor(): React.ReactElement {
   const [attachments, setAttachments] = useState<NoteAttachment[]>(existing?.attachments ?? []);
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
 
-  // ref for editor control
   const editorRef = useRef<RichTextEditorRef | null>(null);
 
   useEffect(() => {
-    // ensure store has loaded
     loadStore();
   }, [loadStore]);
 
@@ -51,15 +47,6 @@ export default function NotesEditor(): React.ReactElement {
     }
   }, [existing?.id]);
 
-  /**
-   * pickImage
-   * - picks, resizes, compresses and copies the image into app storage (if available)
-   * - adds attachment to store (if editing existing note) or to local attachments (if new)
-   * - RETURNS the saved URI (string) on success, or null if cancelled / failed
-   *
-   * This function no longer inserts into the editor directly. The editor's toolbar
-   * will call this via onExternalImagePick and handle insertion itself.
-   */
   const pickImage = async (): Promise<string | null> => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -74,7 +61,6 @@ export default function NotesEditor(): React.ReactElement {
         quality: 1,
       });
 
-      // handle both new and legacy shapes
       if ((result as any).cancelled || (result as any).canceled) return null;
 
       const localUri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
@@ -85,7 +71,6 @@ export default function NotesEditor(): React.ReactElement {
 
       setIsProcessingImage(true);
 
-      // Resize & compress: cap longest side by 1200px and compress to 0.7
       const manipResult = await ImageManipulator.manipulateAsync(
         localUri,
         [{ resize: { width: 1200 } }],
@@ -94,7 +79,6 @@ export default function NotesEditor(): React.ReactElement {
 
       const processedUri = manipResult.uri;
 
-      // --- Robust file storage handling ---
       const docDir = (FileSystem as any).documentDirectory ?? null;
       const cacheDir = (FileSystem as any).cacheDirectory ?? null;
       const baseDirFallback: string | null = docDir ?? cacheDir ?? null;
@@ -107,16 +91,13 @@ export default function NotesEditor(): React.ReactElement {
         const notesDir = `${baseDirFallback}notes/`;
         dest = `${notesDir}${filename}`;
 
-        // ensure folder exists
         const folderInfo = await FileSystem.getInfoAsync(notesDir);
         if (!folderInfo.exists) {
           await FileSystem.makeDirectoryAsync(notesDir, { intermediates: true });
         }
 
-        // copy processed image to app dir
         await FileSystem.copyAsync({ from: processedUri, to: dest });
       } else {
-        // fallback: use the processedUri directly (works in Expo Go / some dev flows)
         dest = processedUri;
         console.warn('pickImage: document/cache directory not available; using processedUri directly. dest=', dest);
       }
@@ -130,12 +111,10 @@ export default function NotesEditor(): React.ReactElement {
       };
 
       if (existing?.id) {
-        // persist attachment for existing note
         await addAttachment(existing.id, attachmentPayloadForStore);
         const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
         setAttachments(updatedNote?.attachments ?? []);
       } else {
-        // temporary attachment for new note (persist when saving the note)
         const temp: NoteAttachment = {
           id: nanoid(),
           uri: attachmentPayloadForStore.uri,
@@ -145,7 +124,6 @@ export default function NotesEditor(): React.ReactElement {
         setAttachments(prev => [...prev, temp]);
       }
 
-      // Return the saved URI so the editor can insert it inline
       return dest;
     } catch (e) {
       console.warn('pickImage error', e);
@@ -158,7 +136,6 @@ export default function NotesEditor(): React.ReactElement {
 
   const handleSave = async (): Promise<void> => {
     try {
-      // pull latest HTML from editor (if available). Fallback to local body state
       const htmlFromEditor = await editorRef.current?.getHTML();
       const finalBody = (htmlFromEditor ?? body) as string;
 
@@ -180,12 +157,48 @@ export default function NotesEditor(): React.ReactElement {
   };
 
   const handleRemoveAttachment = async (attachmentId: string): Promise<void> => {
+    const attachmentToRemove = attachments.find(a => a.id === attachmentId);
+    
     if (existing?.id) {
       await removeAttachment(existing.id, attachmentId);
       const updatedNote = useNotesStore.getState().notes.find(n => n.id === existing.id);
       setAttachments(updatedNote?.attachments ?? []);
+      
+      // Also remove the image from body HTML if it exists
+      if (attachmentToRemove) {
+        const currentHtml = await editorRef.current?.getHTML();
+        if (currentHtml && currentHtml.includes(attachmentToRemove.uri)) {
+          // Remove img tags containing this URI
+          const cleanedHtml = currentHtml.replace(
+            new RegExp(`<img[^>]*src="${attachmentToRemove.uri.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>`, 'g'),
+            ''
+          );
+          setBody(cleanedHtml);
+          // Update editor content
+          editorRef.current?.insertHTML('');
+          // Force re-render by clearing and setting
+          setTimeout(() => {
+            // Note: RichEditor doesn't have a setHTML method, so we need to update via state
+            updateNote(existing.id, { body: cleanedHtml });
+            Alert.alert('Removed', 'Image removed from note. Please reload the editor to see changes.');
+          }, 100);
+        }
+      }
     } else {
-      setAttachments(prev => prev.filter(a => a.id !== attachmentId));
+      const updatedAttachments = attachments.filter(a => a.id !== attachmentId);
+      setAttachments(updatedAttachments);
+      
+      // Remove from body HTML for new notes
+      if (attachmentToRemove) {
+        const currentHtml = await editorRef.current?.getHTML();
+        if (currentHtml && currentHtml.includes(attachmentToRemove.uri)) {
+          const cleanedHtml = currentHtml.replace(
+            new RegExp(`<img[^>]*src="${attachmentToRemove.uri.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>`, 'g'),
+            ''
+          );
+          setBody(cleanedHtml);
+        }
+      }
     }
   };
 
@@ -196,20 +209,21 @@ export default function NotesEditor(): React.ReactElement {
 
       <Text style={[styles.label, { marginTop: 12 }]}>Body</Text>
 
-      {/* use RichTextEditor and pass pickImage as external handler */}
       <View style={{ minHeight: 200, borderRadius: 8, overflow: 'hidden' }}>
         <RichTextEditor
           ref={editorRef}
           initialHTML={body}
           onChange={(html) => setBody(html)}
+          onSave={handleSave}
           placeholder="Write something..."
           autoFocus={false}
           onExternalImagePick={pickImage}
-          externalImageProcessing={isProcessingImage} /* <-- pass processing flag here */
+          externalImageProcessing={isProcessingImage}
         />
       </View>
 
       <Text style={[styles.label, { marginTop: 12 }]}>Attachments</Text>
+      <Text style={styles.hint}>Tip: Images saved here will display in the note view</Text>
       <ImageGrid attachments={attachments} onRemove={handleRemoveAttachment} />
 
       {isProcessingImage ? (
@@ -219,21 +233,14 @@ export default function NotesEditor(): React.ReactElement {
         </View>
       ) : (
         <View style={{ marginTop: 12 }}>
-          {/* Keep this button for picking images outside the editor toolbar (it uses same flow).
-              Now it will also insert the image into the editor after pickImage returns the URI. */}
           <Button
             title="Add Image"
             onPress={async () => {
               try {
                 const uri = await pickImage();
                 if (uri) {
-                  // insert into editor so user sees inline placement
-                  try {
-                    await editorRef.current?.insertImage(uri);
-                  } catch {
-                    // fallback to inserting HTML img tag
-                    await editorRef.current?.insertHTML(`<img src="${uri}" style="max-width:100%;height:auto;" />`);
-                  }
+                  const imgHTML = `<img src="${uri}" style="max-width: 100%; height: auto; display: block; margin: 10px 0;" />`;
+                  await editorRef.current?.insertHTML(imgHTML);
                 }
               } catch (e) {
                 console.warn('Add Image button error', e);
@@ -255,5 +262,6 @@ export default function NotesEditor(): React.ReactElement {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6 },
+  hint: { fontSize: 12, color: '#666', marginBottom: 8, fontStyle: 'italic' },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, backgroundColor: '#fff' },
 });

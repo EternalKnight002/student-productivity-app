@@ -1,5 +1,5 @@
 // app/expenses/analytics.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   SafeAreaView,
   View,
@@ -35,6 +35,14 @@ export default function ExpensesAnalyticsScreen() {
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const months = useMemo(() => getRecentMonths(6), []);
+
+  useEffect(() => {
+    // ensure store loaded if it exposes load()
+    if (typeof store?.load === 'function' && !store.initialized) {
+      store.load().catch((e: any) => console.error('load store in analytics failed', e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Filter expenses by month (selectedMonth) then by archived flag depending on showArchived
   const expensesForMonth = useMemo(() => {
@@ -96,7 +104,7 @@ export default function ExpensesAnalyticsScreen() {
             <Text style={styles.filterLabel}>Filters</Text>
             <View style={styles.filterChips}>
               <Chip
-                label={showArchived ? 'Showing: Archived & Active' : 'Showing: Active only'}
+                label={showArchived ? 'Showing: All (incl archived)' : 'Showing: Active only'}
                 selected={showArchived}
                 onPress={() => setShowArchived((s) => !s)}
                 compact

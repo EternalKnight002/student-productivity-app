@@ -22,17 +22,7 @@ type Props = {
   editorStyle?: object;
   toolbarStyle?: object;
   autoFocus?: boolean;
-  /**
-   * Parent can provide an async function that picks/processes/stores an image
-   * and returns the final URI (or null if cancelled). When provided, the editor's
-   * toolbar image button will call this instead of the built-in picker.
-   */
   onExternalImagePick?: () => Promise<string | null | undefined>;
-
-  /**
-   * Parent can pass this boolean to indicate it is running the image flow
-   * (so the editor shows the processing overlay while true).
-   */
   externalImageProcessing?: boolean;
 };
 
@@ -49,6 +39,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
     initialHTML = "",
     placeholder = "Start writing...",
     onChange,
+    onSave,
     editorStyle,
     toolbarStyle,
     autoFocus = false,
@@ -82,25 +73,18 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         quality: 0.6,
-        base64: true,
+        base64: false,
         allowsEditing: true,
       });
 
       if ((result as any).cancelled || (result as any).canceled) return;
 
-      const { uri, base64 } = result as any;
-
-      if (base64) {
-        const ext = uri?.split(".").pop()?.toLowerCase() ?? "jpg";
-        const mime = ext === "png" ? "image/png" : "image/jpeg";
-        const dataUri = `data:${mime};base64,${base64}`;
-        richTextRef.current?.insertImage(dataUri);
-        return;
-      }
+      const uri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
+      if (!uri) return;
 
       const filename = uri.split("/").pop();
-      // new — cast FileSystem to any for the directory property
-        const dest = `${(FileSystem as any).cacheDirectory}${filename}`;
+      const cacheDir = (FileSystem as any).cacheDirectory;
+      const dest = `${cacheDir}${filename}`;
 
       await FileSystem.copyAsync({ from: uri, to: dest });
       richTextRef.current?.insertImage(dest);
@@ -109,7 +93,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
     }
   }
 
-  // Toolbar handler for image button: prefer parent's onExternalImagePick if provided.
+  // Toolbar handler for image button
   const handleToolbarImagePress = async () => {
     if (onExternalImagePick) {
       try {
@@ -117,26 +101,28 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
         const pickedUri = await onExternalImagePick();
         setLocalProcessing(false);
 
-        if (!pickedUri) return; // cancelled or failed
+        if (!pickedUri) return;
 
-        // Prefer insertImage API; fallback to HTML img tag if necessary.
-        try {
-          richTextRef.current?.insertImage(pickedUri);
-        } catch {
-          richTextRef.current?.insertHTML(
-            `<img src="${pickedUri}" style="max-width:100%;height:auto;" />`
-          );
-        }
+        // Insert placeholder text instead of broken image
+        const placeholder = `[Image attached - will display in note view]`;
+        richTextRef.current?.insertHTML(
+          `<p style="color: #666; font-style: italic; background: #f0f0f0; padding: 8px; border-radius: 4px; margin: 10px 0;">${placeholder}</p>`
+        );
         return;
       } catch (err) {
         setLocalProcessing(false);
         console.warn("onExternalImagePick threw an error", err);
-        // fall through to internal picker
       }
     }
 
     // no external handler, use internal picker
     await internalPickAndInsertImage();
+  };
+
+  const handleSave = async () => {
+    const html = await richTextRef.current?.getContentHtml();
+    onChange?.(html ?? "");
+    onSave?.();
   };
 
   const showProcessing = localProcessing || externalImageProcessing;
@@ -153,7 +139,18 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
           placeholder={placeholder}
           editorStyle={{
             backgroundColor: "transparent",
-            cssText: "body { font-family: -apple-system, Roboto, 'Segoe UI', sans-serif; }",
+            cssText: `
+              body { 
+                font-family: -apple-system, Roboto, 'Segoe UI', sans-serif; 
+                padding: 8px; 
+              }
+              img[src^="file://"] { 
+                display: none !important; 
+              }
+              img[alt=""] {
+                display: none !important;
+              }
+            `,
           }}
           onChange={(html) => onChange?.(html)}
           style={styles.rich}
@@ -161,7 +158,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
           initialFocus={autoFocus}
         />
 
-        {/* Processing overlay (non-blocking visually) */}
         {showProcessing && (
           <View style={styles.overlay} pointerEvents="box-none">
             <View style={styles.overlayInner}>
@@ -189,26 +185,20 @@ const RichTextEditor = forwardRef<RichTextEditorRef, Props>((props, ref) => {
           actions.redo,
         ]}
         iconMap={{
-         [actions.insertImage]: ({ tintColor }: { tintColor?: string }) => (
+          [actions.insertImage]: ({ tintColor }: { tintColor?: string }) => (
             <Text style={{ color: tintColor ?? "#000", fontSize: 16 }}>🖼️</Text>
-            ),
-
+          ),
         }}
         insertImage={handleToolbarImagePress}
       />
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          onPress={async () => {
-            const html = await richTextRef.current?.getContentHtml();
-            props.onChange?.(html ?? "");
-            props.onSave?.();
-          }}
-          style={styles.saveBtn}
-        >
-          <Text style={styles.saveText}>Save</Text>
-        </TouchableOpacity>
-      </View>
+      {onSave && (
+        <View style={styles.actionRow}>
+          <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
+            <Text style={styles.saveText}>Save</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 });
