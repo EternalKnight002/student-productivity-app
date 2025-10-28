@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, SafeAreaView, Pressable, StyleSheet } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import { TaskItem } from '../../src/components/TaskItem';
+import {TaskItem} from '../../src/components/TaskItem';
 import { useTaskStore } from '../../src/stores/useTaskStore';
 import { Task } from '../../src/types/task';
 

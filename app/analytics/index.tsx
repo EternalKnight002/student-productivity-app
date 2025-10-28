@@ -1,198 +1,233 @@
-// app/analytics/index.tsx
-import React, { useMemo, useState } from 'react';
+// app/index.tsx
+// Home screen — updated to use useTheme() hook from src/theme for dynamic light/dark support.
+
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  SafeAreaView,
+  Animated,
   View,
-  StyleSheet,
   Text,
-  FlatList,
-  TouchableOpacity,
+  StyleSheet,
+  Pressable,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
-import theme from '../../src/theme';
-import AnalyticsCard from '../../src/components/AnalyticsCard';
+import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+
+// Import the hook (preferred) so this screen responds to system dark mode
+import { useTheme } from '../../src/theme';
 import Card from '../../src/components/Card';
-import Chip from '../../src/components/Chip';
-import { useExpenseStore } from '../../src/stores/useExpenseStore';
 
-// small helper to produce recent months like ['2025-10','2025-09',...]
-function getRecentMonths(count = 6) {
-  const out: string[] = [];
-  const now = new Date();
-  for (let i = 0; i < count; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toISOString().slice(0, 7);
-    out.push(key);
+type Feature = {
+  key: string;
+  title: string;
+  subtitle: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+  route: string; // must match app/route path
+  color?: string;
+};
+
+const FEATURES: Feature[] = [
+  {
+    key: 'expenses',
+    title: 'Expenses',
+    subtitle: 'Track and manage your spending',
+    icon: 'credit-card',
+    route: '/expenses',
+    color: '#2D9CDB',
+  },
+  {
+    key: 'notes',
+    title: 'Notes',
+    subtitle: 'Capture ideas and study materials',
+    icon: 'file-text',
+    route: '/notes',
+    color: '#A78BFA',
+  },
+  {
+    key: 'planner',
+    title: 'Planner',
+    subtitle: 'Plan your schedule and deadlines',
+    icon: 'calendar',
+    route: '/planner',
+    color: '#FB8C00',
+  },
+];
+
+const NAV_ITEMS = [
+  { key: 'expenses', label: 'Expenses', icon: 'credit-card', route: '/expenses' },
+  { key: 'notes', label: 'Notes', icon: 'file-text', route: '/notes' },
+  { key: 'planner', label: 'Planner', icon: 'calendar', route: '/planner' },
+  { key: 'settings', label: 'Settings', icon: 'settings', route: '/settings' },
+];
+
+export default function Home(): React.ReactElement {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const theme = useTheme();
+  const colors = theme.colors;
+
+  const [active, setActive] = useState<string>('expenses');
+
+  // entrance animation
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [anim]);
+
+  const opacity = anim;
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
+
+  const bg = colors.background;
+  const surface = colors.surface;
+  const text = colors.text;
+  const muted = colors.muted;
+  const primary = colors.primary;
+
+  // Robust navigation helper for expo-router
+  function navigateTo(route: string, key?: string) {
+    if (key) setActive(key);
+
+    try {
+      router.push(route);
+    } catch (err) {
+      try {
+        // @ts-ignore
+        router.replace ? router.replace(route) : router.push(route);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Navigation failed:', err, e);
+      }
+    }
   }
-  return out;
-}
-
-export default function AnalyticsScreen() {
-  const store: any = useExpenseStore((s: any) => s);
-  const expensesRaw: any[] = Array.isArray(store?.expenses) ? store.expenses : [];
-
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [showArchived, setShowArchived] = useState<boolean>(false);
-  const months = useMemo(() => getRecentMonths(6), []);
-
-  // Filter expenses by month (selectedMonth) then by archived flag depending on showArchived
-  const expensesForMonth = useMemo(() => {
-    const monthFiltered = expensesRaw.filter((e: any) => {
-      if (!e?.date) return false;
-      return e.date.slice(0, 7) === selectedMonth;
-    });
-
-    if (showArchived) return monthFiltered;
-    return monthFiltered.filter((e: any) => !e.archived);
-  }, [expensesRaw, selectedMonth, showArchived]);
-
-  const archivedCountInMonth = useMemo(
-    () => expensesRaw.filter((e: any) => e?.date?.slice(0, 7) === selectedMonth && e.archived).length,
-    [expensesRaw, selectedMonth],
-  );
-
-  const totalThisMonth = useMemo(
-    () => expensesForMonth.reduce((acc: number, it: any) => acc + (Number(it.amount) || 0), 0),
-    [expensesForMonth],
-  );
-
-  const countThisMonth = useMemo(() => expensesForMonth.length, [expensesForMonth]);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Analytics</Text>
-      </View>
+    <View style={[styles.page, { backgroundColor: bg }]}> 
+      {/* Animated content area; top spacing kept small because global header sits above */}
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            opacity,
+            transform: [{ translateY }],
+            paddingHorizontal: isTablet ? 48 : 16,
+            paddingTop: isTablet ? 12 : 12,
+          },
+        ]}
+      >
+        {/* Page heading inside content */}
+        <View style={styles.introWrap}>
+          <Text style={[styles.pageTitle, { color: text }]}>Welcome Back</Text>
+          <Text style={[styles.pageSubtitle, { color: muted }]}>What would you like to work on today?</Text>
+        </View>
 
-      <View style={styles.container}>
-        <Card style={{ marginBottom: theme.spacing.md }}>
-          <Text style={styles.cardTitle}>Month</Text>
+        <View style={[styles.features, isTablet && { maxWidth: 900 }]}>
+          {FEATURES.map((f) => (
+            <Pressable
+              key={f.key}
+              onPress={() => navigateTo(f.route, f.key)}
+              android_ripple={{ color: '#00000006' }}
+              style={({ pressed }) => [styles.featurePressable, pressed && styles.featurePressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`${f.title} — ${f.subtitle}`}
+            >
+              <Card style={[styles.featureCard, { backgroundColor: surface }]}>
+                <View style={styles.featureRow}>
+                  <View style={styles.iconWrap}>
+                    <View style={[styles.iconCircle, { backgroundColor: f.color ?? primary }]}>
+                      <Feather name={f.icon} size={18} color="#fff" />
+                    </View>
+                  </View>
 
-          <FlatList
-            horizontal
-            data={months}
-            keyExtractor={(m) => m}
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <View style={{ marginRight: theme.spacing.sm }}>
-                <TouchableOpacity onPress={() => setSelectedMonth(item)}>
-                  <Text
-                    style={[
-                      styles.monthLabel,
-                      item === selectedMonth ? styles.monthSelected : undefined,
-                    ]}
-                  >
-                    {new Date(item + '-01').toLocaleString(undefined, { month: 'short', year: 'numeric' })}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          />
-        </Card>
+                  <View style={styles.textWrap}>
+                    <Text style={[styles.featureTitle, { color: text }]}>{f.title}</Text>
+                    <Text style={[styles.featureSubtitle, { color: muted }]}>{f.subtitle}</Text>
+                  </View>
 
-        <View style={styles.controlsRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.filterLabel}>Filters</Text>
-            <View style={styles.filterChips}>
-              <Chip
-                label={showArchived ? 'Showing: Archived & Active' : 'Showing: Active only'}
-                selected={showArchived}
-                onPress={() => setShowArchived((s) => !s)}
-                compact
-              />
-              {archivedCountInMonth > 0 && !showArchived ? (
-                <View style={styles.archivedBadge}>
-                  <Text style={styles.archivedBadgeText}>{archivedCountInMonth} archived</Text>
+                  <Feather name="chevron-right" size={20} color={muted} />
                 </View>
-              ) : null}
-            </View>
+              </Card>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={{ flex: 1 }} />
+
+        {/* Bottom nav */}
+        <View style={styles.bottomShell} pointerEvents="box-none">
+          <View style={[styles.bottomBar, { backgroundColor: surface }]}>
+            {NAV_ITEMS.map((n) => {
+              const isActive = active === n.key;
+              return (
+                <Pressable
+                  key={n.key}
+                  onPress={() => navigateTo(n.route, n.key)}
+                  style={({ pressed }) => [styles.navItem, pressed && { opacity: 0.85 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={n.label}
+                >
+                  <Feather name={n.icon as any} size={20} color={isActive ? primary : muted} />
+                  <Text style={[styles.navLabel, { color: isActive ? primary : muted }]}>{n.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
-
-        <View style={styles.summaryRow}>
-          <Card style={styles.smallCard}>
-            <Text style={styles.smallTitle}>Total</Text>
-            <Text style={styles.smallValue}>₹{totalThisMonth}</Text>
-          </Card>
-
-          <Card style={styles.smallCard}>
-            <Text style={styles.smallTitle}>Items</Text>
-            <Text style={styles.smallValue}>{countThisMonth}</Text>
-          </Card>
-        </View>
-
-        <AnalyticsCard expenses={expensesForMonth} monthIso={selectedMonth} />
-      </View>
-    </SafeAreaView>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.background },
-  header: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: theme.spacing.sm,
-  },
-  title: { ...theme.typography.h1, color: theme.colors.text },
-  container: { paddingHorizontal: theme.spacing.lg, flex: 1 },
-  cardTitle: { ...theme.typography.body, color: theme.colors.muted, marginBottom: theme.spacing.sm },
+  page: { flex: 1 },
+  container: { flex: 1 },
 
-  controlsRow: {
-    marginBottom: theme.spacing.md,
-  },
-  filterLabel: {
-    ...theme.typography.small,
-    color: theme.colors.muted,
-    marginBottom: theme.spacing.sm / 2,
-  },
-  filterChips: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  archivedBadge: {
-    marginLeft: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  archivedBadgeText: {
-    color: theme.colors.muted,
-    fontSize: theme.typography.small.fontSize,
-  },
+  introWrap: { marginTop: 6, marginBottom: 12 },
+  pageTitle: { fontSize: 28, fontWeight: '800' },
+  pageSubtitle: { marginTop: 6, fontSize: 14 },
 
-  smallCard: {
-    flex: 1,
-    marginRight: theme.spacing.sm,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    marginBottom: theme.spacing.md,
-  },
-  smallTitle: {
-    ...theme.typography.small,
-    color: theme.colors.muted,
-  },
-  smallValue: {
-    ...theme.typography.h2,
-    color: theme.colors.text,
-    marginTop: theme.spacing.sm,
-  },
+  features: { width: '100%' },
+  featurePressable: { marginBottom: 12 },
+  featurePressed: { opacity: 0.95 },
+  featureCard: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 },
+  featureRow: { flexDirection: 'row', alignItems: 'center' },
+  iconWrap: { width: 56, alignItems: 'center', justifyContent: 'center' },
+  iconCircle: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  textWrap: { flex: 1, paddingRight: 8 },
+  featureTitle: { fontSize: 18, fontWeight: '700' },
+  featureSubtitle: { marginTop: 4, fontSize: 14 },
 
-  monthLabel: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
-  },
-  monthSelected: {
-    backgroundColor: theme.colors.primary,
-    color: '#fff',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.lg,
+  bottomShell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.22,
+        shadowOffset: { width: 0, height: -8 },
+        shadowRadius: 18,
+      },
+      android: { elevation: 14 },
+    }),
   },
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+  },
+  navItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, minWidth: 56 },
+  navLabel: { fontSize: 11, marginTop: 4 },
 });
