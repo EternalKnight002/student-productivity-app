@@ -162,7 +162,7 @@ export default function SettingsScreen(): React.ReactElement {
   // Feedback (opens mailto)
   const onFeedback = () => {
     // use Linking instead of router so it opens the mail client
-    router.push('mailto:hello@example.com?subject=Feedback%20—%20Student%20Planner');
+    router.push('mailto:alternatewavelenght@gmail.com?subject=Feedback%20—%20Student%20Planner');
   };
 
   // About screen (assumes /about exists)
