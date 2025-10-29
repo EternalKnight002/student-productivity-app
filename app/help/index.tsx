@@ -10,18 +10,21 @@ export default function HelpScreen(): React.ReactElement {
   const theme = useTheme();
   const colors = theme.colors;
 
-  const openMail = async () => {
-    const to = 'hello@example.com';
-    const subject = encodeURIComponent('Feedback — Student Planner');
-    const body = encodeURIComponent('Hi —\n\nI wanted to share the following feedback:\n');
-    const url = `mailto:${to}?subject=${subject}&body=${body}`;
-    try {
-      await Linking.openURL(url);
-    } catch (err) {
-      // fallback: navigate to settings or show alert
-      router.push('/settings');
-    }
-  };
+ const openMail = async () => {
+  // FIX: This must be a complete email address
+  const to = 'alternatewavelenght@gmail.com'; // Or contact@, support@, etc.
+  
+  const subject = encodeURIComponent('Feedback — Student Planner');
+  const body = encodeURIComponent('Hi —\n\nI wanted to share the following feedback:\n');
+  const url = `mailto:${to}?subject=${subject}&body=${body}`;
+  
+  try {
+    await Linking.openURL(url);
+  } catch (err) {
+    // fallback: navigate to settings or show alert
+    router.push('/settings');
+  }
+};
 
   return (
     <ScrollView style={[styles.page, { backgroundColor: colors.background }]} contentContainerStyle={{ padding: 16 }}>

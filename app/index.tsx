@@ -58,13 +58,15 @@ const FEATURES: Feature[] = [
   },
 ];
 
+// replace the NAV_ITEMS constant in app/index.tsx with this block
 const NAV_ITEMS = [
   { key: 'expenses', label: 'Expenses', icon: 'credit-card', route: '/expenses' },
-  { key: 'notes', label: 'Notes', icon: 'file-text', route: '/notes' },
+  // use MaterialCommunityIcons 'file-document-outline' for Notes (valid name for this icon set)
+  { key: 'notes', label: 'Notes', icon: 'file-document-outline', route: '/notes' },
   { key: 'planner', label: 'Planner', icon: 'calendar', route: '/planner' },
-  // swapped settings -> analytics
   { key: 'analytics', label: 'Analytics', icon: 'chart-line', route: '/analytics' },
 ];
+
 
 export default function Home(): React.ReactElement {
   const router = useRouter();
