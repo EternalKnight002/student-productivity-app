@@ -1,124 +1,112 @@
 // app/index.tsx
-import React, { useEffect, useRef, useState } from "react";
+// Modern interactive home screen with bolder footer icons + analytics swap
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
   Pressable,
   useWindowDimensions,
   Platform,
-  StatusBar,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+  TouchableWithoutFeedback,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-import theme from "../src/theme";
-import Card from "../src/components/Card";
-
-/**
- * Clean, robust Home screen for app/
- * - Uses ../../src/... imports (no import path errors)
- * - Uses Card + Pressable for feature rows (no PrimaryButton prop mismatch)
- * - Dark theme fallback and safe theme token usage
- * - Full-width bottom nav with curved top corners
- * - Simple entrance animation (Animated API compatible with Expo Go)
- *
- * Paste this as: app/index.tsx
- */
-
-// const APP_VERSION = "0.1.0";
+import { useTheme } from '../src/theme';
+import Card from '../src/components/Card';
 
 type Feature = {
   key: string;
   title: string;
   subtitle: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  icon: React.ComponentProps<typeof Feather>['name'];
   route: string;
-  color?: string;
+  colorA: string;
+  colorB: string;
 };
 
 const FEATURES: Feature[] = [
   {
-    key: "expenses",
-    title: "Expenses",
-    subtitle: "Track and manage your spending",
-    icon: "credit-card",
-    route: "/expenses",
-    color: "#2D9CDB",
+    key: 'expenses',
+    title: 'Expenses',
+    subtitle: 'Track and manage your spending',
+    icon: 'credit-card',
+    route: '/expenses',
+    colorA: '#2D9CDB',
+    colorB: '#60C0FF',
   },
   {
-    key: "notes",
-    title: "Notes",
-    subtitle: "Capture ideas and study materials",
-    icon: "file-text",
-    route: "/notes",
-    color: "#A78BFA",
+    key: 'notes',
+    title: 'Notes',
+    subtitle: 'Capture ideas and study materials',
+    icon: 'file-text',
+    route: '/notes',
+    colorA: '#A78BFA',
+    colorB: '#C4B5FD',
   },
   {
-    key: "planner",
-    title: "Planner",
-    subtitle: "Plan your schedule and deadlines",
-    icon: "calendar",
-    route: "/planner",
-    color: "#FB8C00",
+    key: 'planner',
+    title: 'Planner',
+    subtitle: 'Plan your schedule and deadlines',
+    icon: 'calendar',
+    route: '/planner',
+    colorA: '#FB8C00',
+    colorB: '#FFB86B',
   },
 ];
 
 const NAV_ITEMS = [
-  { key: "expenses", label: "Expenses", icon: "credit-card", route: "/expenses" },
-  { key: "notes", label: "Notes", icon: "file-text", route: "/notes" },
-  { key: "planner", label: "Planner", icon: "calendar", route: "/planner" },
-  { key: "settings", label: "Settings", icon: "settings", route: "/settings" },
+  { key: 'expenses', label: 'Expenses', icon: 'credit-card', route: '/expenses' },
+  { key: 'notes', label: 'Notes', icon: 'file-text', route: '/notes' },
+  { key: 'planner', label: 'Planner', icon: 'calendar', route: '/planner' },
+  // swapped settings -> analytics
+  { key: 'analytics', label: 'Analytics', icon: 'chart-line', route: '/analytics' },
 ];
 
 export default function Home(): React.ReactElement {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
+  const theme = useTheme();
+  const colors = theme.colors;
 
-  // keep a local active key to reflect bottom nav
-  const [active, setActive] = useState<string>("expenses");
+  const [active, setActive] = useState<string>('expenses');
 
-  // entrance animation
+  // screen entrance animation
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, {
       toValue: 1,
-      duration: 300,
+      duration: 320,
       useNativeDriver: true,
     }).start();
   }, [anim]);
 
   const opacity = anim;
-  const translateY = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [14, 0],
-  });
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
 
-  // safe theme tokens with fallbacks
-  const colors = (theme && theme.colors) || ({} as any);
-  const bg = colors.background ?? "#07080a";
-  const surface = colors.surface ?? "#0f1417";
-  const text = colors.text ?? "#ffffff";
-  const muted = colors.muted ?? "#9aa0a6";
-  const primary = colors.primary ?? "#7C5CFF";
+  const bg = colors.background;
+  const surface = colors.surface;
+  const text = colors.text;
+  const muted = colors.muted;
+  const primary = colors.primary;
 
   function navigateTo(route: string, key?: string) {
     if (key) setActive(key);
-    // guard router.push in case expo-router is not available at runtime
     try {
       router.push(route);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn("Navigation failed:", err);
+      // fallback
+      // @ts-ignore
+      router.replace ? router.replace(route) : router.push(route);
     }
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: bg }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.page, { backgroundColor: bg }]}>
       <Animated.View
         style={[
           styles.container,
@@ -126,65 +114,36 @@ export default function Home(): React.ReactElement {
             opacity,
             transform: [{ translateY }],
             paddingHorizontal: isTablet ? 48 : 16,
-            paddingTop: isTablet ? 28 : 18,
+            paddingTop: isTablet ? 14 : 12,
           },
         ]}
       >
-        {/* Header - minimal */}
-        <View style={styles.header}>
-          <View>
-            <Text style={[styles.title, { color: text }]}>Welcome Back</Text>
-            <Text style={[styles.subtitle, { color: muted }]}>
-              What would you like to work on today?
-            </Text>
-          </View>
-
-          {/* small settings quick action (keeps header compact) */}
-          <Pressable
-            onPress={() => navigateTo("/settings")}
-            style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.8 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-          >
-            <Feather name="settings" size={18} color={muted} />
-          </Pressable>
+        {/* Subtle on-page header (keeps global header intact) */}
+        <View style={styles.introWrap}>
+          <Text style={[styles.pageTitle, { color: text }]}>Welcome Back</Text>
+          <Text style={[styles.pageSubtitle, { color: muted }]}>
+            What would you like to work on today?
+          </Text>
         </View>
 
-        {/* Feature rows using Card + Pressable (safe, consistent) */}
+        {/* New interactive feature cards */}
         <View style={[styles.features, isTablet && { maxWidth: 900 }]}>
           {FEATURES.map((f) => (
-            <Pressable
+            <FeatureCard
               key={f.key}
+              feature={f}
+              surface={surface}
+              text={text}
+              muted={muted}
               onPress={() => navigateTo(f.route, f.key)}
-              android_ripple={{ color: "#ffffff06" }}
-              style={({ pressed }) => [styles.featurePressable, pressed && styles.featurePressed]}
-              accessibilityRole="button"
-              accessibilityLabel={`${f.title} — ${f.subtitle}`}
-            >
-              <Card style={[styles.featureCard, { backgroundColor: surface }]}>
-                <View style={styles.featureRow}>
-                  <View style={styles.iconWrap}>
-                    <View style={[styles.iconCircle, { backgroundColor: f.color ?? primary }]}>
-                      <Feather name={f.icon} size={18} color="#fff" />
-                    </View>
-                  </View>
-
-                  <View style={styles.textWrap}>
-                    <Text style={[styles.featureTitle, { color: text }]}>{f.title}</Text>
-                    <Text style={[styles.featureSubtitle, { color: muted }]}>{f.subtitle}</Text>
-                  </View>
-
-                  <Feather name="chevron-right" size={20} color={muted} />
-                </View>
-              </Card>
-            </Pressable>
+            />
           ))}
         </View>
 
         <View style={{ flex: 1 }} />
 
-        {/* Bottom nav — full width, touches edges, curved top corners */}
-        <View style={styles.bottomShell}>
+        {/* Bottom nav — heavier icons (MaterialCommunityIcons used for visual weight) */}
+        <View style={styles.bottomShell} pointerEvents="box-none">
           <View style={[styles.bottomBar, { backgroundColor: surface }]}>
             {NAV_ITEMS.map((n) => {
               const isActive = active === n.key;
@@ -196,7 +155,13 @@ export default function Home(): React.ReactElement {
                   accessibilityRole="button"
                   accessibilityLabel={n.label}
                 >
-                  <Feather name={n.icon as any} size={20} color={isActive ? primary : muted} />
+                  {/* use MaterialCommunityIcons for a chunkier look */}
+                  <MaterialCommunityIcons
+                    name={n.icon as any}
+                    size={22}
+                    color={isActive ? primary : muted}
+                    style={{ marginBottom: 2 }}
+                  />
                   <Text style={[styles.navLabel, { color: isActive ? primary : muted }]}>
                     {n.label}
                   </Text>
@@ -205,102 +170,146 @@ export default function Home(): React.ReactElement {
             })}
           </View>
         </View>
-
-        {/* small version text */}
-        <View style={styles.versionWrap}>
-          {/* <Text style={[styles.versionText, { color: muted }]}>v{APP_VERSION}</Text> */}
-        </View>
       </Animated.View>
-    </SafeAreaView>
+    </View>
+  );
+}
+
+/* FeatureCard component (local) */
+function FeatureCard({
+  feature,
+  surface,
+  text,
+  muted,
+  onPress,
+}: {
+  feature: Feature;
+  surface: string;
+  text: string;
+  muted: string;
+  onPress: () => void;
+}) {
+  // press animation
+  const scale = useRef(new Animated.Value(1)).current;
+
+  function onPressIn() {
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, friction: 8 }).start();
+  }
+  function onPressOut() {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8 }).start();
+  }
+
+  return (
+    <TouchableWithoutFeedback
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+    >
+      <Animated.View style={[styles.featurePressable, { transform: [{ scale }] }]}>
+        <Card style={[styles.featureCard, { backgroundColor: surface }]}>
+          <View style={styles.featureRow}>
+            <View style={styles.iconWrap}>
+              <LinearGradient
+                colors={[feature.colorA, feature.colorB]}
+                start={[0, 0]}
+                end={[1, 1]}
+                style={styles.gradientCircle}
+              >
+                <Feather name={feature.icon} size={18} color="#fff" />
+              </LinearGradient>
+            </View>
+
+            <View style={styles.textWrap}>
+              <Text style={[styles.featureTitle, { color: text }]}>{feature.title}</Text>
+              <Text style={[styles.featureSubtitle, { color: muted }]}>{feature.subtitle}</Text>
+            </View>
+
+            <View style={styles.chevWrap}>
+              <Feather name="chevron-right" size={20} color={muted} />
+            </View>
+          </View>
+        </Card>
+      </Animated.View>
+    </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  page: { flex: 1 },
   container: { flex: 1 },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  headerAction: {
-    padding: 8,
-    borderRadius: 10,
-  },
+  introWrap: { marginTop: 6, marginBottom: 12 },
+  pageTitle: { fontSize: 28, fontWeight: '800' },
+  pageSubtitle: { marginTop: 6, fontSize: 14 },
 
-  title: {
-    fontSize: 26,
-    fontWeight: "800",
+  features: { width: '100%' },
+  featurePressable: {
+    marginBottom: 14,
   },
-  subtitle: {
-    marginTop: 6,
-    fontSize: 14,
-  },
-
-  features: { width: "100%" },
-  featurePressable: { marginBottom: 12 },
-  featurePressed: { opacity: 0.95 },
   featureCard: {
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    // subtle lift/shadow
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.06,
+        shadowOffset: { width: 0, height: 8 },
+        shadowRadius: 18,
+      },
+      android: { elevation: 3 },
+    }),
   },
   featureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    // gap is unsupported in RN stable versions; use padding/margins instead
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  iconWrap: { width: 56, alignItems: "center", justifyContent: "center" },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  iconWrap: { width: 64, alignItems: 'center', justifyContent: 'center' },
+  gradientCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textWrap: { flex: 1, paddingRight: 8 },
-  featureTitle: { fontSize: 18, fontWeight: "700" },
-  featureSubtitle: { marginTop: 4, fontSize: 14 },
+  featureTitle: { fontSize: 18, fontWeight: '800' },
+  featureSubtitle: { marginTop: 6, fontSize: 13 },
+
+  chevWrap: { width: 28, alignItems: 'center' },
 
   bottomShell: {
-    position: "absolute",
+    position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    overflow: "hidden",
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.22,
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
         shadowOffset: { width: 0, height: -8 },
         shadowRadius: 18,
       },
-      android: { elevation: 14 },
+      android: { elevation: 18 },
     }),
   },
   bottomBar: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
     paddingTop: 12,
-    paddingBottom: Platform.OS === "ios" ? 28 : 12,
+    paddingBottom: Platform.OS === 'ios' ? 26 : 12,
   },
   navItem: {
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 8,
-    minWidth: 56,
+    minWidth: 64,
   },
   navLabel: { fontSize: 11, marginTop: 4 },
-
-  versionWrap: {
-    position: "absolute",
-    right: 12,
-    bottom: 12 + (Platform.OS === "ios" ? 6 : 0),
-  },
-  versionText: { fontSize: 11, opacity: 0.95 },
 });

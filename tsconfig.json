@@ -1,4 +1,5 @@
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -12,16 +13,16 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+
+    // ✅ TypeScript 6+ style path alias (no deprecated baseUrl)
     "paths": {
-      "~/*": [
-        "./src/*"
-      ]
+      "~/*": ["./src/*"]
     },
-    "types": [
-      "react",
-      "react-native"
-    ]
+
+    // type roots
+    "types": ["react", "react-native"]
   },
+  "include": ["./**/*.ts", "./**/*.tsx", "expo.d.ts"],
   "exclude": [
     "node_modules",
     "babel.config.js",
@@ -29,11 +30,5 @@
     "jest.config.js",
     "eas.json",
     ".expo"
-  ],
-  "include": [
-    "./**/*.ts",
-    "./**/*.tsx",
-    "expo.d.ts"
-  ],
-  "extends": "expo/tsconfig.base"
+  ]
 }

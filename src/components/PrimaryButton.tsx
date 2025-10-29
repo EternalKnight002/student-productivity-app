@@ -1,6 +1,6 @@
 // src/components/PrimaryButton.tsx
 import React from 'react';
-import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
 import theme from '../theme';
 
 type Variant = 'primary' | 'ghost';
@@ -11,8 +11,8 @@ interface Props {
   loading?: boolean;
   disabled?: boolean;
   variant?: Variant;
-  style?: any;
-  textStyle?: any;
+  style?: ViewStyle;
+  textStyle?: TextStyle;
   icon?: React.ReactNode;
   accessibilityLabel?: string;
 }
@@ -28,33 +28,27 @@ export default function PrimaryButton({
   icon,
   accessibilityLabel,
 }: Props) {
+  const isPrimary = variant === 'primary';
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
-        variant === 'primary' ? styles.primary : styles.ghost,
+        isPrimary ? styles.primary : styles.ghost,
         (disabled || loading) && styles.disabled,
         pressed && styles.pressed,
         style,
       ]}
       accessibilityLabel={accessibilityLabel || title}
+      accessibilityRole="button"
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : theme.colors.primary} />
+        <ActivityIndicator color={isPrimary ? '#fff' : theme.colors.primary} />
       ) : (
         <>
           {icon}
-          <Text
-            style={[
-              variant === 'primary' ? styles.primaryLabel : styles.ghostLabel,
-              icon && styles.label,
-              textStyle,
-            ]}
-          >
-            {title}
-          </Text>
+          <Text style={[isPrimary ? styles.primaryLabel : styles.ghostLabel, textStyle]}>{title}</Text>
         </>
       )}
     </Pressable>
@@ -66,11 +60,11 @@ const styles = StyleSheet.create({
     height: theme.sizes.buttonHeight,
     minWidth: 120,
     paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.radii.md,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    elevation: 2,
+    elevation: 3,
   },
   primary: {
     backgroundColor: theme.colors.primary,
@@ -78,7 +72,7 @@ const styles = StyleSheet.create({
   primaryLabel: {
     color: '#FFFFFF',
     fontSize: theme.typography.body.fontSize,
-    fontWeight: theme.typography.body.fontWeight,
+    fontWeight: '700',
   },
   ghost: {
     backgroundColor: theme.colors.surface,
@@ -88,14 +82,12 @@ const styles = StyleSheet.create({
   ghostLabel: {
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
   },
   disabled: {
     opacity: 0.6,
   },
   pressed: {
     transform: [{ scale: 0.985 }],
-  },
-  label: {
-    marginLeft: 8,
   },
 });

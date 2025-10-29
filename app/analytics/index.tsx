@@ -1,198 +1,234 @@
 // app/analytics/index.tsx
 import React, { useMemo, useState } from 'react';
 import {
-  SafeAreaView,
   View,
-  StyleSheet,
   Text,
+  StyleSheet,
+  ScrollView,
+  Dimensions,
+  Pressable,
   FlatList,
-  TouchableOpacity,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { LineChart } from 'react-native-chart-kit';
+
 import theme from '../../src/theme';
-import AnalyticsCard from '../../src/components/AnalyticsCard';
 import Card from '../../src/components/Card';
-import Chip from '../../src/components/Chip';
+import AnalyticsCard from '../../src/components/AnalyticsCard';
 import { useExpenseStore } from '../../src/stores/useExpenseStore';
+import { formatCurrency } from '../../src/utils/formatters';
 
-// small helper to produce recent months like ['2025-10','2025-09',...]
-function getRecentMonths(count = 6) {
-  const out: string[] = [];
-  const now = new Date();
-  for (let i = 0; i < count; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toISOString().slice(0, 7);
-    out.push(key);
-  }
-  return out;
-}
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
-export default function AnalyticsScreen() {
+// ---------- MAIN COMPONENT ----------
+export default function AnalyticsScreen(): React.ReactElement {
+  const router = useRouter();
+  const colors = theme.colors;
   const store: any = useExpenseStore((s: any) => s);
-  const expensesRaw: any[] = Array.isArray(store?.expenses) ? store.expenses : [];
+  const expenses = Array.isArray(store?.expenses) ? store.expenses : [];
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [showArchived, setShowArchived] = useState<boolean>(false);
-  const months = useMemo(() => getRecentMonths(6), []);
+  // ---- time range filter ----
+  const RANGES = [
+    { key: '7', label: '7 days', days: 7 },
+    { key: '30', label: '30 days', days: 30 },
+    { key: 'all', label: 'All time', days: Infinity },
+  ] as const;
+  type RangeKey = (typeof RANGES)[number]['key'];
+  const [range, setRange] = useState<RangeKey>('7');
 
-  // Filter expenses by month (selectedMonth) then by archived flag depending on showArchived
-  const expensesForMonth = useMemo(() => {
-    const monthFiltered = expensesRaw.filter((e: any) => {
-      if (!e?.date) return false;
-      return e.date.slice(0, 7) === selectedMonth;
-    });
+  // --- derived / filtered ---
+  const filtered = useMemo(() => {
+    if (range === 'all') return expenses;
+    const since = new Date();
+    since.setDate(since.getDate() - Number(range));
+    return expenses.filter((e: any) => new Date(e.date ?? 0) >= since);
+  }, [range, expenses]);
 
-    if (showArchived) return monthFiltered;
-    return monthFiltered.filter((e: any) => !e.archived);
-  }, [expensesRaw, selectedMonth, showArchived]);
+  // --- chart data ---
+  const series = useMemo(() => {
+    const map = new Map<string, number>();
+    const days = range === 'all' ? 30 : Number(range);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString();
+      map.set(key, 0);
+    }
+    for (const e of filtered) {
+      const dateKey = e?.date ? new Date(e.date).toLocaleDateString() : new Date().toLocaleDateString();
+      if (map.has(dateKey)) {
+        map.set(dateKey, (map.get(dateKey) ?? 0) + Number(e.amount ?? 0));
+      }
+    }
+    const labels = Array.from(map.keys());
+    const data = Array.from(map.values());
+    return { labels, data };
+  }, [filtered, range]);
 
-  const archivedCountInMonth = useMemo(
-    () => expensesRaw.filter((e: any) => e?.date?.slice(0, 7) === selectedMonth && e.archived).length,
-    [expensesRaw, selectedMonth],
-  );
-
-  const totalThisMonth = useMemo(
-    () => expensesForMonth.reduce((acc: number, it: any) => acc + (Number(it.amount) || 0), 0),
-    [expensesForMonth],
-  );
-
-  const countThisMonth = useMemo(() => expensesForMonth.length, [expensesForMonth]);
+  // --- totals ---
+  const total = useMemo(() => filtered.reduce((a: number, e: any) => a + (Number(e.amount) || 0), 0), [filtered]);
+  const avg = filtered.length ? total / filtered.length : 0;
+  const count = filtered.length;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Analytics</Text>
+    <ScrollView style={[styles.page, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <Text style={[styles.title, { color: colors.text }]}>Analytics</Text>
+        <Pressable onPress={() => router.push('/settings')} style={styles.headerAction}>
+          <Feather name="download" size={18} color={colors.primary} />
+        </Pressable>
       </View>
 
-      <View style={styles.container}>
-        <Card style={{ marginBottom: theme.spacing.md }}>
-          <Text style={styles.cardTitle}>Month</Text>
+      {/* Time-range selector */}
+      <FlatList
+        data={RANGES}
+        horizontal
+        keyExtractor={(r) => r.key}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
+        showsHorizontalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <Pressable
+            onPress={() => setRange(item.key)}
+            style={[
+              styles.rangeChip,
+              range === item.key && { backgroundColor: colors.primary + '22', borderColor: colors.primary },
+            ]}
+          >
+            <Text style={[styles.rangeText, range === item.key && { color: colors.primary, fontWeight: '700' }]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        )}
+      />
 
-          <FlatList
-            horizontal
-            data={months}
-            keyExtractor={(m) => m}
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <View style={{ marginRight: theme.spacing.sm }}>
-                <TouchableOpacity onPress={() => setSelectedMonth(item)}>
-                  <Text
-                    style={[
-                      styles.monthLabel,
-                      item === selectedMonth ? styles.monthSelected : undefined,
-                    ]}
-                  >
-                    {new Date(item + '-01').toLocaleString(undefined, { month: 'short', year: 'numeric' })}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          />
+      <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+        {/* Summary cards */}
+        <View style={styles.row}>
+          <SummaryCard title="Total spent" value={formatCurrency(total)} />
+          <SummaryCard title="Avg / expense" value={formatCurrency(avg)} />
+        </View>
+
+        <View style={styles.row}>
+          <SummaryCard title="Transactions" value={`${count}`} />
+          <SummaryCard title="Period" value={range === 'all' ? 'All' : `${range} days`} />
+        </View>
+
+        {/* Chart */}
+        <Card style={styles.chartCard}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Spending — {range === 'all' ? 'All Time' : `Last ${range} Days`}</Text>
+          {series.data.length ? (
+            <LineChart
+              data={{
+                labels: series.labels.map((l) => {
+                  const d = new Date(l);
+                  return isNaN(d.getTime()) ? l : d.toLocaleDateString(undefined, { weekday: 'short' });
+                }),
+                datasets: [{ data: series.data }],
+              }}
+              width={Math.max(SCREEN_WIDTH - 64, 300)}
+              height={210}
+              chartConfig={{
+                backgroundGradientFrom: '#fff',
+                backgroundGradientTo: '#fff',
+                decimalPlaces: 0,
+                color: (o = 1) => `rgba(55,81,255,${o})`,
+                labelColor: () => colors.muted,
+                propsForDots: { r: '4', strokeWidth: '0', fill: colors.primary },
+                propsForBackgroundLines: { strokeDasharray: '' },
+              }}
+              bezier
+              style={{ marginVertical: 8 }}
+            />
+          ) : (
+            <View style={styles.emptyChart}>
+              <Text style={{ color: colors.muted }}>No data in selected range</Text>
+            </View>
+          )}
         </Card>
 
-        <View style={styles.controlsRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.filterLabel}>Filters</Text>
-            <View style={styles.filterChips}>
-              <Chip
-                label={showArchived ? 'Showing: Archived & Active' : 'Showing: Active only'}
-                selected={showArchived}
-                onPress={() => setShowArchived((s) => !s)}
-                compact
-              />
-              {archivedCountInMonth > 0 && !showArchived ? (
-                <View style={styles.archivedBadge}>
-                  <Text style={styles.archivedBadgeText}>{archivedCountInMonth} archived</Text>
+        {/* Category breakdown */}
+        <Card style={styles.breakdownCard}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Top categories</Text>
+          <View style={{ marginTop: 8 }}>
+            {getTopCategories(filtered).map((c) => (
+              <View key={c.key} style={styles.catRow}>
+                <View style={[styles.catDot, { backgroundColor: c.color }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.catLabel, { color: colors.text }]}>{c.key}</Text>
+                  <Text style={[styles.catSub, { color: colors.muted }]}>{formatCurrency(c.total)}</Text>
                 </View>
-              ) : null}
-            </View>
+                <Text style={[styles.catAmount, { color: colors.text }]}>{formatCurrency(c.total)}</Text>
+              </View>
+            ))}
+            {filtered.length === 0 && (
+              <Text style={{ color: colors.muted, marginTop: 8 }}>No categories yet</Text>
+            )}
           </View>
-        </View>
+        </Card>
 
-        <View style={styles.summaryRow}>
-          <Card style={styles.smallCard}>
-            <Text style={styles.smallTitle}>Total</Text>
-            <Text style={styles.smallValue}>₹{totalThisMonth}</Text>
-          </Card>
-
-          <Card style={styles.smallCard}>
-            <Text style={styles.smallTitle}>Items</Text>
-            <Text style={styles.smallValue}>{countThisMonth}</Text>
-          </Card>
-        </View>
-
-        <AnalyticsCard expenses={expensesForMonth} monthIso={selectedMonth} />
+        {/* Monthly detailed analytics card */}
+        <AnalyticsCard expenses={expenses} monthIso={new Date().toISOString().slice(0, 7)} style={{ marginTop: 16 }} />
       </View>
-    </SafeAreaView>
+    </ScrollView>
   );
+}
+
+// ---------- SummaryCard (local small component) ----------
+function SummaryCard({ title, value }: { title: string; value: string }) {
+  return (
+    <Card style={styles.smallCard}>
+      <Text style={styles.smallTitle}>{title}</Text>
+      <Text style={styles.smallValue}>{value}</Text>
+    </Card>
+  );
+}
+
+// ---------- HELPERS ----------
+function getTopCategories(expenses: any[]) {
+  const map = new Map<string, number>();
+  for (const e of expenses) {
+    const k = (e?.category ?? 'Other').toString();
+    map.set(k, (map.get(k) ?? 0) + Number(e.amount ?? 0));
+  }
+  const palette = ['#2D9CDB', '#A78BFA', '#FB8C00', '#00C48C', '#FF7AA2', '#9E9E9E'];
+  const items = Array.from(map.entries()).map(([key, total], idx) => ({ key, total, color: palette[idx % palette.length] }));
+  items.sort((a, b) => b.total - a.total);
+  return items.slice(0, 6);
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.background },
-  header: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: theme.spacing.sm,
-  },
-  title: { ...theme.typography.h1, color: theme.colors.text },
-  container: { paddingHorizontal: theme.spacing.lg, flex: 1 },
-  cardTitle: { ...theme.typography.body, color: theme.colors.muted, marginBottom: theme.spacing.sm },
+  page: { flex: 1 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  title: { fontSize: 22, fontWeight: '800' },
+  headerAction: { padding: 8 },
 
-  controlsRow: {
-    marginBottom: theme.spacing.md,
+  rangeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#fff',
+    marginRight: 10,
   },
-  filterLabel: {
-    ...theme.typography.small,
-    color: theme.colors.muted,
-    marginBottom: theme.spacing.sm / 2,
-  },
-  filterChips: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  archivedBadge: {
-    marginLeft: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  archivedBadgeText: {
-    color: theme.colors.muted,
-    fontSize: theme.typography.small.fontSize,
-  },
+  rangeText: { fontSize: 13, color: '#374151' },
 
-  smallCard: {
-    flex: 1,
-    marginRight: theme.spacing.sm,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    marginBottom: theme.spacing.md,
-  },
-  smallTitle: {
-    ...theme.typography.small,
-    color: theme.colors.muted,
-  },
-  smallValue: {
-    ...theme.typography.h2,
-    color: theme.colors.text,
-    marginTop: theme.spacing.sm,
-  },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
+  smallCard: { flex: 1, paddingVertical: 14 },
+  smallTitle: { fontSize: 14, color: '#6B7280' },
+  smallValue: { fontSize: 18, fontWeight: '700', color: '#111827', marginTop: 4 },
 
-  monthLabel: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
-  },
-  monthSelected: {
-    backgroundColor: theme.colors.primary,
-    color: '#fff',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.lg,
-    overflow: 'hidden',
-  },
+  chartCard: { marginTop: 6, borderRadius: 14, paddingBottom: 18 },
+  sectionTitle: { fontSize: 14, fontWeight: '700' },
+  emptyChart: { paddingVertical: 36, alignItems: 'center' },
+
+  breakdownCard: { marginTop: 12, paddingBottom: 8 },
+
+  catRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  catDot: { width: 10, height: 10, borderRadius: 6, marginRight: 12 },
+  catLabel: { fontSize: 15, fontWeight: '700' },
+  catSub: { fontSize: 13 },
+  catAmount: { fontSize: 15, fontWeight: '700' },
 });

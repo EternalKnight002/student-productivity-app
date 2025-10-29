@@ -1,5 +1,5 @@
 // app/settings.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Alert,
   ScrollView,
   Platform,
+  Pressable,
+  Switch,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -17,45 +19,48 @@ import { useRouter } from 'expo-router';
 import { useExpenseStore } from '../src/stores/useExpenseStore';
 import type { Expense } from '../src/types/expense';
 import { formatCurrency } from '../src/utils/formatters';
-
-const THEME_KEY = 'app-settings-theme';
+import { useTheme } from '../src/theme';
+import Card from '../src/components/Card';
+import { Feather } from '@expo/vector-icons';
 
 export default function SettingsScreen(): React.ReactElement {
   const router = useRouter();
-
-  // Read full store instance (avoids implicit 'any' in selector lambdas)
   const store = useExpenseStore();
-  const expenses: Expense[] = store.expenses;
+  const expenses: Expense[] = store.expenses ?? [];
   const addExpense = store.addExpense;
   const clearAll = store.clearAll;
 
-  // UI state
+  // useTheme provides theme tokens and controllers (setAccent, toggleMode, ...)
+  const { theme, mode, toggleMode, setAccent } = useTheme();
+
+  // Export/Import state
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [exportJson, setExportJson] = useState('');
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importText, setImportText] = useState('');
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const t = await AsyncStorage.getItem(THEME_KEY);
-        if (t === 'dark') setTheme('dark');
-        else setTheme('light');
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
+  const totalAmount = expenses.reduce((acc: number, curr: Expense) => acc + (curr.amount ?? 0), 0);
 
-  // Export - open modal and prepare JSON
-  const onExport = (): void => {
+  const onExport = useCallback(() => {
     const json = JSON.stringify(expenses, null, 2);
     setExportJson(json);
     setExportModalVisible(true);
-  };
+  }, [expenses]);
 
-  // Import - validate then import
+  const onClearAll = useCallback(() => {
+    Alert.alert('Clear all expenses?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: () => {
+          clearAll?.();
+          Alert.alert('Cleared', 'All expenses removed.');
+        },
+      },
+    ]);
+  }, [clearAll]);
+
   const onImport = async (): Promise<void> => {
     if (!importText || importText.trim() === '') {
       Alert.alert('Paste JSON', 'Please paste valid JSON to import.');
@@ -68,36 +73,31 @@ export default function SettingsScreen(): React.ReactElement {
       Alert.alert('Invalid JSON', 'Could not parse JSON. Please check format.');
       return;
     }
-
     if (!Array.isArray(parsed)) {
       Alert.alert('Invalid format', 'Expected an array of expense objects.');
       return;
     }
 
-    // basic validation and import
     const items = parsed as unknown[];
     const valid: Expense[] = [];
     for (const it of items) {
       if (typeof it !== 'object' || it === null) continue;
       const asAny = it as Record<string, unknown>;
-      // required fields: id (string), amount (number), category (string), date (string)
       if (
         typeof asAny.id === 'string' &&
         typeof asAny.amount === 'number' &&
         typeof asAny.category === 'string' &&
         typeof asAny.date === 'string'
       ) {
-        const e: Expense = {
+        valid.push({
           id: String(asAny.id),
           amount: Math.round(Number(asAny.amount)),
           category: String(asAny.category),
           date: String(asAny.date),
           note: typeof asAny.note === 'string' ? (asAny.note as string) : undefined,
-          createdAt:
-            typeof asAny.createdAt === 'string' ? (asAny.createdAt as string) : new Date().toISOString(),
+          createdAt: typeof asAny.createdAt === 'string' ? (asAny.createdAt as string) : new Date().toISOString(),
           updatedAt: typeof asAny.updatedAt === 'string' ? (asAny.updatedAt as string) : undefined,
-        };
-        valid.push(e);
+        });
       }
     }
 
@@ -114,9 +114,8 @@ export default function SettingsScreen(): React.ReactElement {
           text: 'Cancel',
           style: 'cancel',
           onPress: async () => {
-            // replace flow
-            clearAll();
-            for (const e of valid) addExpense(e);
+            clearAll?.();
+            for (const e of valid) addExpense?.(e);
             setImportModalVisible(false);
             setImportText('');
             Alert.alert('Imported', `Replaced with ${valid.length} items.`);
@@ -125,91 +124,136 @@ export default function SettingsScreen(): React.ReactElement {
         {
           text: 'Append',
           onPress: () => {
-            for (const e of valid) addExpense(e);
+            for (const e of valid) addExpense?.(e);
             setImportModalVisible(false);
             setImportText('');
             Alert.alert('Imported', `Appended ${valid.length} items.`);
           },
         },
-      ]
+      ],
     );
   };
 
-  const onClearAll = (): void => {
-    Alert.alert('Clear all expenses?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: () => {
-          clearAll();
-          Alert.alert('Cleared', 'All expenses removed.');
-        },
-      },
-    ]);
-  };
+  // Accent color choices (small set)
+  const accents = useMemo(() => ['#3751FF', '#00C48C', '#FB8C00', '#A78BFA', '#FF7AA2'], []);
+  // local selectedAccent reads from the current theme primary so swatches reflect current state
+  const [selectedAccent, setSelectedAccent] = useState<string>(theme.colors.primary ?? accents[0]);
 
-  const toggleTheme = async (): Promise<void> => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
+  // if theme.colors.primary changes externally, keep local selectedAccent synced
+  React.useEffect(() => {
+    if (theme?.colors?.primary) setSelectedAccent(theme.colors.primary);
+  }, [theme?.colors?.primary]);
+
+  const chooseAccent = async (col: string) => {
+    setSelectedAccent(col);
+    // call provider function to update and persist — UI updates live because provider updates tokens
     try {
-      await AsyncStorage.setItem(THEME_KEY, next);
+      await setAccent(col);
     } catch {
       // ignore
     }
   };
 
-  // explicit typed reducer for total (no implicit any)
-  const totalAmount = expenses.reduce((acc: number, curr: Expense) => acc + (curr.amount ?? 0), 0);
+  // Theme toggle (uses ThemeProvider)
+  const onToggleTheme = async () => {
+    await toggleMode();
+  };
+
+  // Feedback (opens mailto)
+  const onFeedback = () => {
+    // use Linking instead of router so it opens the mail client
+    router.push('mailto:hello@example.com?subject=Feedback%20—%20Student%20Planner');
+  };
+
+  // About screen (assumes /about exists)
+  const onAbout = () => {
+    router.push('/about');
+  };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
-      <Text style={styles.title}>Settings</Text>
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} contentContainerStyle={{ padding: 16 }}>
+      <Text style={[styles.title, { color: theme.colors.text }]}>Settings</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Data</Text>
+      <Card style={styles.card}>
+        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Preferences</Text>
+
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Dark mode</Text>
+            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Switch between light & dark</Text>
+          </View>
+          <Switch value={mode === 'dark'} onValueChange={onToggleTheme} />
+        </View>
+
+        <View style={[styles.row, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>
+          <View style={styles.rowLeft}>
+            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Accent color</Text>
+            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Choose an accent for the app</Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {accents.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => chooseAccent(c)}
+                style={[
+                  styles.accentSwatch,
+                  { backgroundColor: c, borderWidth: selectedAccent === c ? 3 : 0, borderColor: '#fff' },
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+      </Card>
+
+      <Card style={styles.card}>
+        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Data</Text>
 
         <TouchableOpacity style={styles.row} onPress={onExport} activeOpacity={0.8}>
-          <Text style={styles.rowTitle}>Export expenses (JSON)</Text>
-          <Text style={styles.rowSub}>Open JSON to copy/share</Text>
+          <View>
+            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Export expenses (JSON)</Text>
+            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Open JSON to copy/share</Text>
+          </View>
+          <Feather name="share" size={18} color={theme.colors.primary} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.row} onPress={() => setImportModalVisible(true)} activeOpacity={0.8}>
-          <Text style={styles.rowTitle}>Import expenses (JSON)</Text>
-          <Text style={styles.rowSub}>Paste exported JSON to import</Text>
+          <View>
+            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Import expenses (JSON)</Text>
+            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Paste exported JSON to import</Text>
+          </View>
+          <Feather name="upload" size={18} color={theme.colors.muted} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.row} onPress={onClearAll} activeOpacity={0.8}>
-          <Text style={[styles.rowTitle, { color: '#EF4444' }]}>Clear all expenses</Text>
-          <Text style={styles.rowSub}>Removes all local expense data</Text>
+          <View>
+            <Text style={[styles.rowTitle, { color: '#EF4444' }]}>Clear all expenses</Text>
+            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Removes all local expense data</Text>
+          </View>
+          <Feather name="trash-2" size={18} color="#EF4444" />
         </TouchableOpacity>
-      </View>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Preferences</Text>
+      <Card style={styles.card}>
+        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Support</Text>
 
-        <TouchableOpacity style={styles.row} onPress={toggleTheme} activeOpacity={0.8}>
-          <Text style={styles.rowTitle}>Theme</Text>
-          <Text style={styles.rowSub}>{theme === 'light' ? 'Light' : 'Dark'}</Text>
+        <TouchableOpacity style={styles.row} onPress={onFeedback} activeOpacity={0.8}>
+          <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Help & feedback</Text>
+          <Feather name="help-circle" size={18} color={theme.colors.muted} />
         </TouchableOpacity>
-      </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Quick info</Text>
-        <Text style={styles.info}>Total expenses: {expenses.length}</Text>
-        <Text style={styles.info}>Total amount: {formatCurrency(totalAmount)}</Text>
-
-        <TouchableOpacity style={[styles.row, { marginTop: 12 }]} onPress={() => router.push('/analytics')} activeOpacity={0.85}>
-          <Text style={[styles.rowTitle, { color: '#3751FF' }]}>Open Analytics</Text>
+        <TouchableOpacity style={styles.row} onPress={onAbout} activeOpacity={0.8}>
+          <Text style={[styles.rowTitle, { color: theme.colors.text }]}>About</Text>
+          <Feather name="info" size={18} color={theme.colors.muted} />
         </TouchableOpacity>
-      </View>
+      </Card>
 
       {/* Export Modal */}
       <Modal visible={exportModalVisible} animationType="slide" onRequestClose={() => setExportModalVisible(false)}>
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Exported JSON</Text>
+        <View style={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Exported JSON</Text>
           <ScrollView style={{ flex: 1 }}>
-            <TextInput value={exportJson} multiline editable={false} style={styles.exportText} textAlignVertical="top" />
+            <TextInput value={exportJson} multiline editable={false} style={[styles.exportText, { backgroundColor: theme.colors.background, color: theme.colors.text }]} textAlignVertical="top" />
           </ScrollView>
 
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
@@ -222,15 +266,16 @@ export default function SettingsScreen(): React.ReactElement {
 
       {/* Import Modal */}
       <Modal visible={importModalVisible} animationType="slide" onRequestClose={() => setImportModalVisible(false)}>
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Import JSON</Text>
-          <Text style={styles.modalHint}>Paste an exported JSON array of expenses below:</Text>
+        <View style={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}>
+          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Import JSON</Text>
+          <Text style={[styles.modalHint, { color: theme.colors.muted }]}>Paste an exported JSON array of expenses below:</Text>
           <TextInput
             value={importText}
             onChangeText={setImportText}
             multiline
             placeholder="Paste JSON here..."
-            style={[styles.exportText, { height: 240 }]}
+            placeholderTextColor={theme.colors.muted}
+            style={[styles.exportText, { height: 240, backgroundColor: theme.colors.background, color: theme.colors.text }]}
             textAlignVertical="top"
           />
 
@@ -238,7 +283,7 @@ export default function SettingsScreen(): React.ReactElement {
             <TouchableOpacity style={styles.modalBtn} onPress={() => setImportModalVisible(false)}>
               <Text style={styles.modalBtnText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#3751FF' }]} onPress={onImport}>
+            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.colors.primary }]} onPress={onImport}>
               <Text style={[styles.modalBtnText, { color: '#fff' }]}>Import</Text>
             </TouchableOpacity>
           </View>
@@ -249,28 +294,20 @@ export default function SettingsScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1 },
   title: { fontSize: 22, fontWeight: '700', marginBottom: 12, marginTop: Platform.OS === 'ios' ? 12 : 0, paddingLeft: 2 },
-  card: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-  },
+  card: { marginBottom: 12, padding: 12, borderRadius: 12 },
   cardTitle: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
-  row: {
-    paddingVertical: 10,
-    borderTopWidth: 0.5,
-    borderTopColor: '#F1F5F9',
-  },
+  row: { paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowLeft: { flex: 1, paddingRight: 12 },
   rowTitle: { fontSize: 14, fontWeight: '600' },
   rowSub: { color: '#6B7280', marginTop: 4 },
   info: { color: '#374151', marginTop: 6 },
 
-  modalContainer: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  modalContainer: { flex: 1, padding: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
   modalHint: { color: '#6B7280', marginBottom: 8 },
-  exportText: { backgroundColor: '#F3F4F6', padding: 12, borderRadius: 8, minHeight: 120 },
+  exportText: { padding: 12, borderRadius: 8, minHeight: 120 },
 
   modalBtn: {
     paddingVertical: 10,
@@ -282,4 +319,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalBtnText: { fontWeight: '700' },
+
+  accentSwatch: { width: 36, height: 36, borderRadius: 10, marginLeft: 8, borderColor: '#fff' },
 });
