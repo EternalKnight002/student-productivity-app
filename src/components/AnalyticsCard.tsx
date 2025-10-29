@@ -1,21 +1,22 @@
 // src/components/AnalyticsCard.tsx
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, StyleProp, ViewStyle } from 'react-native';
 import theme from '../theme';
 import Card from './Card';
 
 type CategoryAgg = { category: string; total: number; percent: number };
 
 interface Props {
-  expenses: Array<any>;
+  expenses?: Array<any>;
   monthIso?: string; // optional ISO string for month filter, e.g. '2025-10' (YYYY-MM)
+  style?: StyleProp<ViewStyle>; // allow callers to pass a style (fixes TS error)
 }
 
 /**
  * Simple in-component aggregation for categories.
  * Returns totals and percentages for the provided month (if any).
  */
-export default function AnalyticsCard({ expenses = [], monthIso }: Props) {
+export default function AnalyticsCard({ expenses = [], monthIso, style }: Props) {
   const prepared = useMemo(() => {
     // filter by monthIso if provided (YYYY-MM)
     const filtered = (expenses || []).filter((e) => {
@@ -48,7 +49,7 @@ export default function AnalyticsCard({ expenses = [], monthIso }: Props) {
   const top3 = prepared.list.slice(0, 3);
 
   return (
-    <Card style={styles.card}>
+    <Card style={[styles.card, style]}>
       <View style={styles.headerRow}>
         <Text style={styles.heading}>Monthly overview</Text>
         <Text style={styles.total}>₹{prepared.total}</Text>
@@ -134,6 +135,7 @@ const styles = StyleSheet.create({
   rowRight: {
     flex: 5,
     alignItems: 'flex-end',
+    width: '100%',
   },
   cat: {
     ...theme.typography.body,
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
   barBackground: {
     width: '100%',
     height: 8,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.background, // subtle track
     borderRadius: 6,
     overflow: 'hidden',
     marginTop: 6,

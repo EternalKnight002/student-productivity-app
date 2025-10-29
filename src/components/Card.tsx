@@ -1,13 +1,6 @@
 // src/components/Card.tsx
 import React from 'react';
-import {
-  LayoutRectangle,
-  StyleProp,
-  StyleSheet,
-  Text,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { LayoutRectangle, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import theme from '../theme';
 
 interface CardProps {
@@ -17,6 +10,7 @@ interface CardProps {
   style?: StyleProp<ViewStyle>;
   onLayout?: (layout: LayoutRectangle) => void;
   testID?: string;
+  elevated?: boolean;
 }
 
 export default function Card({
@@ -26,10 +20,11 @@ export default function Card({
   style,
   onLayout,
   testID,
+  elevated = true,
 }: CardProps) {
   return (
     <View
-      style={[styles.container, style]}
+      style={[styles.container, elevated ? styles.elevated : undefined, style]}
       onLayout={(e) => onLayout && onLayout(e.nativeEvent.layout)}
       testID={testID}
       accessibilityRole="summary"
@@ -44,15 +39,12 @@ export default function Card({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.md,
+    borderRadius: theme.radii.lg,
     padding: theme.spacing.lg,
     marginVertical: theme.spacing.sm,
-    // subtle shadow/elevation
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+  },
+  elevated: {
+    ...PlatformShadow(),
   },
   title: {
     ...theme.typography.h2,
@@ -64,7 +56,16 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     marginBottom: theme.spacing.md,
   },
-  content: {
-    // content sits here
-  },
+  content: {},
 });
+
+/** small helper to keep shadow consistent cross-platform */
+function PlatformShadow() {
+  return {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
+  } as ViewStyle;
+}

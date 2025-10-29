@@ -1,12 +1,6 @@
 // src/components/Chip.tsx
 import React from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  ViewStyle,
-  TextStyle,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, ViewStyle, TextStyle } from 'react-native';
 import theme from '../theme';
 
 interface Props {
@@ -38,13 +32,11 @@ export default function Chip({
         styles.base,
         selected ? styles.selected : styles.unselected,
         compact && styles.compact,
-        pressed ? styles.pressed : undefined,
+        pressed && styles.pressed,
         style,
       ]}
     >
-      <Text style={[styles.label, selected ? styles.selectedLabel : {}, textStyle]}>
-        {label}
-      </Text>
+      <Text style={[styles.label, selected ? styles.selectedLabel : {}, textStyle]}>{label}</Text>
     </Pressable>
   );
 }
@@ -53,8 +45,8 @@ const styles = StyleSheet.create({
   base: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: theme.radii.lg,
-    minHeight: 32,
+    borderRadius: theme.radii.round,
+    minHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: theme.spacing.sm,
@@ -62,10 +54,11 @@ const styles = StyleSheet.create({
   compact: {
     paddingVertical: 6,
     paddingHorizontal: 10,
-    minHeight: 28,
+    minHeight: 30,
   },
   selected: {
     backgroundColor: theme.colors.primary,
+    ...platformMicroShadow(),
   },
   unselected: {
     backgroundColor: theme.colors.surface,
@@ -78,9 +71,19 @@ const styles = StyleSheet.create({
   },
   selectedLabel: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   pressed: {
     transform: [{ scale: 0.985 }],
   },
 });
+
+function platformMicroShadow() {
+  return {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  } as any;
+}
