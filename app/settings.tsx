@@ -18,9 +18,12 @@ import { Feather } from '@expo/vector-icons';
 
 import { useExpenseStore } from '../src/stores/useExpenseStore';
 import type { Expense } from '../src/types/expense';
-import { formatCurrency } from '../src/utils/formatters';
 import Card from '../src/components/Card';
-import useThemeStore from '../src/stores/useThemeStore';
+
+// NOTE:
+// Dark mode and Accent color features are intentionally disabled for now.
+// They will be re-introduced in a future UI redesign/update.
+// This screen shows non-functional controls and a "Coming in future update" message.
 
 export default function SettingsScreen(): React.ReactElement {
   const router = useRouter();
@@ -29,28 +32,7 @@ export default function SettingsScreen(): React.ReactElement {
   const addExpense = store.addExpense;
   const clearAll = store.clearAll;
 
-  // THEME: use the persistent theme store we added
-  const dark = useThemeStore((s) => s.dark);
-  const accent = useThemeStore((s) => s.accent);
-  const setAccent = useThemeStore((s) => s.setAccent);
-  const toggleDark = useThemeStore((s) => s.toggleDark);
-
-  // Build a theme object similar to what app used previously (so components using theme props keep working)
-  const theme = useMemo(
-    () => ({
-      colors: {
-        primary: accent,
-        accent,
-        background: dark ? '#0B1220' : '#F8FAFC',
-        surface: dark ? '#0f1724' : '#fff',
-        text: dark ? '#E6EEF8' : '#0F1724',
-        muted: dark ? '#9AA7B2' : '#94A3B8',
-      },
-    }),
-    [dark, accent],
-  );
-
-  // Export/Import state
+  // Export / Import state
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [exportJson, setExportJson] = useState('');
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -151,70 +133,62 @@ export default function SettingsScreen(): React.ReactElement {
     );
   };
 
-  // Accent color choices
+  // Accent color choices (display only)
   const accents = useMemo(() => ['#3751FF', '#00C48C', '#FB8C00', '#A78BFA', '#FF7AA2'], []);
 
-  // local selectedAccent reads from the current theme primary so swatches reflect current state
-  const [selectedAccent, setSelectedAccent] = useState<string>(theme.colors.primary ?? accents[0]);
-
-  React.useEffect(() => {
-    if (theme?.colors?.primary) setSelectedAccent(theme.colors.primary);
-  }, [theme?.colors?.primary]);
-
-  const chooseAccent = async (col: string) => {
-    setSelectedAccent(col);
-    try {
-      await setAccent(col);
-    } catch {
-      // ignore
-    }
+  // handlers for disabled controls
+  const onComingSoon = (feature = 'This feature') => {
+    Alert.alert('Coming soon', `${feature} will be available in a future update.`);
   };
 
-  // Theme toggle
-  const onToggleTheme = async () => {
-    // toggleDark flips and persists in store
-    toggleDark();
-  };
-
-  // Feedback (opens mailto)
   const onFeedback = () => {
     router.push('mailto:alternatewavelenght@gmail.com?subject=Feedback%20—%20Student%20Planner');
   };
 
-  // About screen
   const onAbout = () => {
     router.push('/about');
   };
 
+  // simple static colors so layout remains consistent
+  const staticTheme = {
+    colors: {
+      primary: '#3751FF',
+      background: '#F8FAFC',
+      surface: '#fff',
+      text: '#0F1724',
+      muted: '#94A3B8',
+    },
+  };
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} contentContainerStyle={{ padding: 16 }}>
-      <Text style={[styles.title, { color: theme.colors.text }]}>Settings</Text>
+    <ScrollView style={[styles.container, { backgroundColor: staticTheme.colors.background }]} contentContainerStyle={{ padding: 16 }}>
+      <Text style={[styles.title, { color: staticTheme.colors.text }]}>Settings</Text>
 
       <Card style={styles.card}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Preferences</Text>
+        <Text style={[styles.cardTitle, { color: staticTheme.colors.text }]}>Preferences</Text>
 
         <View style={styles.row}>
           <View style={styles.rowLeft}>
-            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Dark mode</Text>
-            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Switch between light & dark</Text>
+            <Text style={[styles.rowTitle, { color: staticTheme.colors.text }]}>Dark mode</Text>
+            <Text style={[styles.rowSub, { color: staticTheme.colors.muted }]}>Coming in a future update</Text>
           </View>
-          <Switch value={dark} onValueChange={onToggleTheme} />
+          <Switch value={false} onValueChange={() => onComingSoon('Dark mode')} disabled />
         </View>
 
         <View style={[styles.row, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>
           <View style={styles.rowLeft}>
-            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Accent color</Text>
-            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Choose an accent for the app</Text>
+            <Text style={[styles.rowTitle, { color: staticTheme.colors.text }]}>Accent color</Text>
+            <Text style={[styles.rowSub, { color: staticTheme.colors.muted }]}>Coming in a future update</Text>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             {accents.map((c) => (
               <Pressable
                 key={c}
-                onPress={() => chooseAccent(c)}
+                onPress={() => onComingSoon('Accent color')}
                 style={[
                   styles.accentSwatch,
-                  { backgroundColor: c, borderWidth: selectedAccent === c ? 3 : 0, borderColor: '#fff' },
+                  { backgroundColor: c, borderWidth: 0, borderColor: '#fff' },
                 ]}
               />
             ))}
@@ -223,53 +197,53 @@ export default function SettingsScreen(): React.ReactElement {
       </Card>
 
       <Card style={styles.card}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Data</Text>
+        <Text style={[styles.cardTitle, { color: staticTheme.colors.text }]}>Data</Text>
 
         <TouchableOpacity style={styles.row} onPress={onExport} activeOpacity={0.8}>
           <View>
-            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Export expenses (JSON)</Text>
-            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Open JSON to copy/share</Text>
+            <Text style={[styles.rowTitle, { color: staticTheme.colors.text }]}>Export expenses (JSON)</Text>
+            <Text style={[styles.rowSub, { color: staticTheme.colors.muted }]}>Open JSON to copy/share</Text>
           </View>
-          <Feather name="share" size={18} color={theme.colors.primary} />
+          <Feather name="share" size={18} color={staticTheme.colors.primary} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.row} onPress={() => setImportModalVisible(true)} activeOpacity={0.8}>
           <View>
-            <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Import expenses (JSON)</Text>
-            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Paste exported JSON to import</Text>
+            <Text style={[styles.rowTitle, { color: staticTheme.colors.text }]}>Import expenses (JSON)</Text>
+            <Text style={[styles.rowSub, { color: staticTheme.colors.muted }]}>Paste exported JSON to import</Text>
           </View>
-          <Feather name="upload" size={18} color={theme.colors.muted} />
+          <Feather name="upload" size={18} color={staticTheme.colors.muted} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.row} onPress={onClearAll} activeOpacity={0.8}>
           <View>
             <Text style={[styles.rowTitle, { color: '#EF4444' }]}>Clear all expenses</Text>
-            <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Removes all local expense data</Text>
+            <Text style={[styles.rowSub, { color: staticTheme.colors.muted }]}>Removes all local expense data</Text>
           </View>
           <Feather name="trash-2" size={18} color="#EF4444" />
         </TouchableOpacity>
       </Card>
 
       <Card style={styles.card}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Support</Text>
+        <Text style={[styles.cardTitle, { color: staticTheme.colors.text }]}>Support</Text>
 
         <TouchableOpacity style={styles.row} onPress={onFeedback} activeOpacity={0.8}>
-          <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Help & feedback</Text>
-          <Feather name="help-circle" size={18} color={theme.colors.muted} />
+          <Text style={[styles.rowTitle, { color: staticTheme.colors.text }]}>Help & feedback</Text>
+          <Feather name="help-circle" size={18} color={staticTheme.colors.muted} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.row} onPress={onAbout} activeOpacity={0.8}>
-          <Text style={[styles.rowTitle, { color: theme.colors.text }]}>About</Text>
-          <Feather name="info" size={18} color={theme.colors.muted} />
+          <Text style={[styles.rowTitle, { color: staticTheme.colors.text }]}>About</Text>
+          <Feather name="info" size={18} color={staticTheme.colors.muted} />
         </TouchableOpacity>
       </Card>
 
       {/* Export Modal */}
       <Modal visible={exportModalVisible} animationType="slide" onRequestClose={() => setExportModalVisible(false)}>
-        <View style={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Exported JSON</Text>
+        <View style={[styles.modalContainer, { backgroundColor: staticTheme.colors.surface }]}>
+          <Text style={[styles.modalTitle, { color: staticTheme.colors.text }]}>Exported JSON</Text>
           <ScrollView style={{ flex: 1 }}>
-            <TextInput value={exportJson} multiline editable={false} style={[styles.exportText, { backgroundColor: theme.colors.background, color: theme.colors.text }]} textAlignVertical="top" />
+            <TextInput value={exportJson} multiline editable={false} style={[styles.exportText, { backgroundColor: staticTheme.colors.background, color: staticTheme.colors.text }]} textAlignVertical="top" />
           </ScrollView>
 
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
@@ -282,16 +256,16 @@ export default function SettingsScreen(): React.ReactElement {
 
       {/* Import Modal */}
       <Modal visible={importModalVisible} animationType="slide" onRequestClose={() => setImportModalVisible(false)}>
-        <View style={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Import JSON</Text>
-          <Text style={[styles.modalHint, { color: theme.colors.muted }]}>Paste an exported JSON array of expenses below:</Text>
+        <View style={[styles.modalContainer, { backgroundColor: staticTheme.colors.surface }]}>
+          <Text style={[styles.modalTitle, { color: staticTheme.colors.text }]}>Import JSON</Text>
+          <Text style={[styles.modalHint, { color: staticTheme.colors.muted }]}>Paste an exported JSON array of expenses below:</Text>
           <TextInput
             value={importText}
             onChangeText={setImportText}
             multiline
             placeholder="Paste JSON here..."
-            placeholderTextColor={theme.colors.muted}
-            style={[styles.exportText, { height: 240, backgroundColor: theme.colors.background, color: theme.colors.text }]}
+            placeholderTextColor={staticTheme.colors.muted}
+            style={[styles.exportText, { height: 240, backgroundColor: staticTheme.colors.background, color: staticTheme.colors.text }]}
             textAlignVertical="top"
           />
 
@@ -299,7 +273,7 @@ export default function SettingsScreen(): React.ReactElement {
             <TouchableOpacity style={styles.modalBtn} onPress={() => setImportModalVisible(false)}>
               <Text style={styles.modalBtnText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.colors.primary }]} onPress={onImport}>
+            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: staticTheme.colors.primary }]} onPress={onImport}>
               <Text style={[styles.modalBtnText, { color: '#fff' }]}>Import</Text>
             </TouchableOpacity>
           </View>
