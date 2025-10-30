@@ -1,113 +1,150 @@
 // src/stores/useNotesStore.ts
-import create from 'zustand';
+import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { persist } from 'zustand/middleware';
 import { Note, NoteAttachment } from '../types/note';
-import { loadNotes, saveNotes } from '../services/notesStorage';
 import { nanoid } from 'nanoid/non-secure';
-import { cleanupOrphanedFiles } from '../services/notesCleanup';
 
-type NotesState = {
-  getById: (id: string) => Note | undefined;
+type NotesStore = {
   notes: Note[];
-  initialized: boolean;
   load: () => Promise<void>;
-  addNote: (partial: Partial<Note>) => Promise<Note>;
-  updateNote: (id: string, patch: Partial<Note>) => Promise<Note | null>;
+  addNote: (data: Partial<Note>) => Promise<Note>;
+  updateNote: (id: string, data: Partial<Note>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
-  addAttachment: (noteId: string, attachment: Omit<NoteAttachment, 'id'> & { uri: string }) => Promise<void>;
-  removeAttachment: (noteId: string, attachmentId: string) => Promise<void>;
+  addAttachment: (id: string, att: NoteAttachment) => Promise<void>;
+  removeAttachment: (id: string, attachmentId: string) => Promise<void>;
+  clearAllNotes: () => Promise<void>;
 };
 
-export const useNotesStore = create<NotesState>((set, get) => ({
-  notes: [],
-  initialized: false,
+function safeArray(value: unknown): Note[] {
+  // value might be:
+  // - an array of notes (good)
+  // - an object that contains notes (old shape)
+  // - anything else (fallback empty array)
+  if (Array.isArray(value)) return value as Note[];
+  if (value && typeof value === 'object') {
+    const asObj = value as any;
+    if (Array.isArray(asObj.notes)) return asObj.notes as Note[];
+    // sometimes persist wrapped state inside { state: { notes: [...] } }
+    if (asObj.state && Array.isArray(asObj.state.notes)) return asObj.state.notes as Note[];
+  }
+  return [];
+}
 
-  load: async () => {
-    const fromStorage = await loadNotes();
-    set({ notes: fromStorage, initialized: true });
-    // Run cleanup in background; don't block UI/startup
-    cleanupOrphanedFiles().catch(() => {});
-  },
+export const useNotesStore = create<NotesStore>()(
+  persist(
+    (set, get) => ({
+      notes: [],
 
-  addNote: async (partial: Partial<Note>) => {
-    const now = new Date().toISOString();
-    const note: Note = {
-      id: nanoid(),
-      title: partial.title ?? '',
-      body: partial.body ?? '',
-      tags: partial.tags ?? [],
-      pinned: !!partial.pinned,
-      attachments: partial.attachments ?? [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    set((state) => {
-      const newNotes = [note, ...state.notes];
-      saveNotes(newNotes);
-      return { notes: newNotes };
-    });
-    return note;
-  },
+      load: async () => {
+        try {
+          const stored = await AsyncStorage.getItem('notes');
+          if (!stored) return;
+          const parsed = JSON.parse(stored);
+          const arr = safeArray(parsed);
+          set({ notes: arr });
+        } catch (e) {
+          console.error('load error', e);
+        }
+      },
 
-  updateNote: async (id: string, patch: Partial<Note>) => {
-    let updated: Note | null = null;
-    set((state) => {
-      const newNotes = state.notes.map((n) => {
-        if (n.id !== id) return n;
-        const merged = { ...n, ...patch, updatedAt: new Date().toISOString() };
-        updated = merged;
-        return merged;
-      });
-      saveNotes(newNotes);
-      return { notes: newNotes };
-    });
-    return updated;
-  },
-
-  deleteNote: async (id: string) => {
-    set((state) => {
-      const newNotes = state.notes.filter((n) => n.id !== id);
-      saveNotes(newNotes);
-      return { notes: newNotes };
-    });
-  },
-
-  getById: (id: string) => {
-    return get().notes.find((n) => n.id === id);
-  },
-
-  addAttachment: async (noteId: string, attachment: Omit<NoteAttachment, 'id'> & { uri: string }) => {
-    set((state) => {
-      const newNotes = state.notes.map((n) => {
-        if (n.id !== noteId) return n;
-        const att = {
-          id: nanoid(),
-          uri: attachment.uri,
-          mimeType: attachment.mimeType,
-          createdAt: new Date().toISOString(),
-        };
-        const updatedNote = {
-          ...n,
-          attachments: [...(n.attachments ?? []), att],
+      addNote: async (data) => {
+        const newNote: Note = {
+          id: data.id ?? nanoid(),
+          title: data.title ?? 'Untitled',
+          body: data.body ?? '',
+          attachments: Array.isArray(data.attachments) ? (data.attachments as NoteAttachment[]) : [],
+          createdAt: data.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          tags: data.tags ?? [],
+          pinned: !!data.pinned,
         };
-        return updatedNote;
-      });
-      saveNotes(newNotes);
-      return { notes: newNotes };
-    });
-  },
 
-  removeAttachment: async (noteId: string, attachmentId: string) => {
-    set((state) => {
-      const newNotes = state.notes.map((n) => {
-        if (n.id !== noteId) return n;
-        const attachments = (n.attachments ?? []).filter((a) => a.id !== attachmentId);
-        return { ...n, attachments, updatedAt: new Date().toISOString() };
-      });
-      saveNotes(newNotes);
-      return { notes: newNotes };
-    });
-  },
-}));
+        // be defensive: ensure existingNotes is an array
+        const existing = safeArray(get().notes);
+        const updated = [newNote, ...existing];
+        set({ notes: updated });
 
-export default useNotesStore;
+        try {
+          await AsyncStorage.setItem('notes', JSON.stringify(updated));
+        } catch (e) {
+          console.error('persist addNote error', e);
+        }
+
+        return newNote;
+      },
+
+      updateNote: async (id, data) => {
+        const existing = safeArray(get().notes);
+        const updated = existing.map((n) =>
+          n.id === id ? { ...n, ...data, updatedAt: new Date().toISOString() } : n
+        );
+        set({ notes: updated });
+
+        try {
+          await AsyncStorage.setItem('notes', JSON.stringify(updated));
+        } catch (e) {
+          console.error('persist updateNote error', e);
+        }
+      },
+
+      deleteNote: async (id) => {
+        const existing = safeArray(get().notes);
+        const updated = existing.filter((n) => n.id !== id);
+        set({ notes: updated });
+
+        try {
+          await AsyncStorage.setItem('notes', JSON.stringify(updated));
+        } catch (e) {
+          console.error('persist deleteNote error', e);
+        }
+      },
+
+      addAttachment: async (id, att) => {
+        const existing = safeArray(get().notes);
+        const updated = existing.map((n) =>
+          n.id === id ? { ...n, attachments: [...(n.attachments ?? []), att] } : n
+        );
+        set({ notes: updated });
+
+        try {
+          await AsyncStorage.setItem('notes', JSON.stringify(updated));
+        } catch (e) {
+          console.error('persist addAttachment error', e);
+        }
+      },
+
+      removeAttachment: async (id, attachmentId) => {
+        const existing = safeArray(get().notes);
+        const updated = existing.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                attachments: (n.attachments ?? []).filter((a) => a.id !== attachmentId),
+              }
+            : n
+        );
+        set({ notes: updated });
+
+        try {
+          await AsyncStorage.setItem('notes', JSON.stringify(updated));
+        } catch (e) {
+          console.error('persist removeAttachment error', e);
+        }
+      },
+
+      clearAllNotes: async () => {
+        set({ notes: [] });
+        try {
+          await AsyncStorage.removeItem('notes');
+        } catch (e) {
+          console.error('persist clearAllNotes error', e);
+        }
+      },
+    }),
+    {
+      name: 'notes',
+      getStorage: () => AsyncStorage,
+    }
+  )
+);

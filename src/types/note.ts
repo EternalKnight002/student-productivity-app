@@ -1,20 +1,19 @@
 // src/types/note.ts
-export type UUID = string;
 
-export interface NoteAttachment {
-  id: UUID;
-  uri: string; // local file:// path in FileSystem.documentDirectory or remote URL later
-  mimeType?: string;
-  createdAt: string; // ISO
-}
+export type NoteAttachment = {
+  id: string;
+  uri: string;
+  mimeType: string;
+  createdAt: string;
+};
 
 export interface Note {
-  id: UUID;
+  id: string;
   title: string;
   body: string;
+  attachments: NoteAttachment[];
+  createdAt: string;
+  updatedAt: string;
   tags?: string[];
   pinned?: boolean;
-  attachments?: NoteAttachment[];
-  createdAt: string;
-  updatedAt?: string;
 }
