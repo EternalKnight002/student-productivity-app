@@ -13,15 +13,14 @@ import {
   Pressable,
   Switch,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 
 import { useExpenseStore } from '../src/stores/useExpenseStore';
 import type { Expense } from '../src/types/expense';
 import { formatCurrency } from '../src/utils/formatters';
-import { useTheme } from '../src/theme';
 import Card from '../src/components/Card';
-import { Feather } from '@expo/vector-icons';
+import useThemeStore from '../src/stores/useThemeStore';
 
 export default function SettingsScreen(): React.ReactElement {
   const router = useRouter();
@@ -30,8 +29,26 @@ export default function SettingsScreen(): React.ReactElement {
   const addExpense = store.addExpense;
   const clearAll = store.clearAll;
 
-  // useTheme provides theme tokens and controllers (setAccent, toggleMode, ...)
-  const { theme, mode, toggleMode, setAccent } = useTheme();
+  // THEME: use the persistent theme store we added
+  const dark = useThemeStore((s) => s.dark);
+  const accent = useThemeStore((s) => s.accent);
+  const setAccent = useThemeStore((s) => s.setAccent);
+  const toggleDark = useThemeStore((s) => s.toggleDark);
+
+  // Build a theme object similar to what app used previously (so components using theme props keep working)
+  const theme = useMemo(
+    () => ({
+      colors: {
+        primary: accent,
+        accent,
+        background: dark ? '#0B1220' : '#F8FAFC',
+        surface: dark ? '#0f1724' : '#fff',
+        text: dark ? '#E6EEF8' : '#0F1724',
+        muted: dark ? '#9AA7B2' : '#94A3B8',
+      },
+    }),
+    [dark, accent],
+  );
 
   // Export/Import state
   const [exportModalVisible, setExportModalVisible] = useState(false);
@@ -134,19 +151,18 @@ export default function SettingsScreen(): React.ReactElement {
     );
   };
 
-  // Accent color choices (small set)
+  // Accent color choices
   const accents = useMemo(() => ['#3751FF', '#00C48C', '#FB8C00', '#A78BFA', '#FF7AA2'], []);
+
   // local selectedAccent reads from the current theme primary so swatches reflect current state
   const [selectedAccent, setSelectedAccent] = useState<string>(theme.colors.primary ?? accents[0]);
 
-  // if theme.colors.primary changes externally, keep local selectedAccent synced
   React.useEffect(() => {
     if (theme?.colors?.primary) setSelectedAccent(theme.colors.primary);
   }, [theme?.colors?.primary]);
 
   const chooseAccent = async (col: string) => {
     setSelectedAccent(col);
-    // call provider function to update and persist — UI updates live because provider updates tokens
     try {
       await setAccent(col);
     } catch {
@@ -154,18 +170,18 @@ export default function SettingsScreen(): React.ReactElement {
     }
   };
 
-  // Theme toggle (uses ThemeProvider)
+  // Theme toggle
   const onToggleTheme = async () => {
-    await toggleMode();
+    // toggleDark flips and persists in store
+    toggleDark();
   };
 
   // Feedback (opens mailto)
   const onFeedback = () => {
-    // use Linking instead of router so it opens the mail client
     router.push('mailto:alternatewavelenght@gmail.com?subject=Feedback%20—%20Student%20Planner');
   };
 
-  // About screen (assumes /about exists)
+  // About screen
   const onAbout = () => {
     router.push('/about');
   };
@@ -182,7 +198,7 @@ export default function SettingsScreen(): React.ReactElement {
             <Text style={[styles.rowTitle, { color: theme.colors.text }]}>Dark mode</Text>
             <Text style={[styles.rowSub, { color: theme.colors.muted }]}>Switch between light & dark</Text>
           </View>
-          <Switch value={mode === 'dark'} onValueChange={onToggleTheme} />
+          <Switch value={dark} onValueChange={onToggleTheme} />
         </View>
 
         <View style={[styles.row, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}>

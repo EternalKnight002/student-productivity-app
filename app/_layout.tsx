@@ -1,6 +1,5 @@
 // app/_layout.tsx
 // Drawer with improved avatar + grouped menu + type-safe Feather icons
-
 import 'react-native-get-random-values';
 import React, { useRef, useState, useEffect } from 'react';
 import { Slot, useRouter } from 'expo-router';
@@ -20,6 +19,8 @@ import {
 import { Feather } from '@expo/vector-icons';
 
 import TopHeader from '../src/components/TopHeaderCard';
+import useThemeStore from '../src/stores/useThemeStore';
+import ThemeProvider from '../src/theme/ThemeProvider'; 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(360, Math.round(SCREEN_WIDTH * 0.78));
@@ -101,10 +102,32 @@ export default function Layout(): React.ReactElement {
     .join('')
     .toUpperCase();
 
+  // THEME: subscribe to theme store so layout re-renders on change
+  const dark = useThemeStore((s) => s.dark);
+  const accent = useThemeStore((s) => s.accent);
+
+  // Build a theme object for ThemeProvider (your project already expects a theme shape)
+  const theme = {
+    dark,
+    colors: {
+      primary: accent,
+      accent,
+      background: dark ? '#0B1220' : '#F8FAFC',
+      surface: dark ? '#0f1724' : '#fff',
+      text: dark ? '#E6EEF8' : '#0F1724',
+      muted: dark ? '#9AA7B2' : '#94A3B8',
+      danger: '#FF5C5C',
+    },
+    spacing: { sm: 8, md: 12, lg: 16, xl: 24 }, // keep minimal tokens used by layout
+    radii: { sm: 8, md: 12, lg: 18 },
+    typography: { h1: { fontSize: 22 }, h2: { fontSize: 18 }, body: { fontSize: 14 }, small: { fontSize: 12 } },
+    sizes: { fab: 64 },
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider style={{ flex: 1 }}>
-        <RNStatusBar barStyle="dark-content" translucent={false} />
+        <RNStatusBar barStyle={dark ? 'light-content' : 'dark-content'} translucent={false} />
 
         {/* Header with avatar icon on right */}
         <TopHeader
@@ -115,9 +138,13 @@ export default function Layout(): React.ReactElement {
           avatarUri={profile.avatarUri}
         />
 
-        <Animated.View style={{ flex: 1, transform: [{ scale: contentScale }] }} pointerEvents={open ? 'none' : 'auto'}>
+        {/* Wrap Slot with ThemeProvider so children can consume theme values */}
+       <ThemeProvider>
+          <Animated.View style={{ flex: 1, transform: [{ scale: contentScale }] }} pointerEvents={open ? 'none' : 'auto'}>
           <Slot />
-        </Animated.View>
+          </Animated.View>
+        </ThemeProvider>
+
 
         {/* Overlay */}
         <Animated.View pointerEvents={open ? 'auto' : 'none'} style={[styles.overlay, { opacity: overlayOpacity }]}>
@@ -164,11 +191,7 @@ export default function Layout(): React.ReactElement {
                 onPress={() => navigateAndClose(m.route)}
                 style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.85 }]}
               >
-                <Feather
-                  name={m.icon as React.ComponentProps<typeof Feather>['name']}
-                  size={18}
-                  color="#374151"
-                />
+                <Feather name={m.icon as React.ComponentProps<typeof Feather>['name']} size={18} color="#374151" />
                 <Text style={styles.menuLabel}>{m.label}</Text>
               </Pressable>
             ))}
@@ -183,11 +206,7 @@ export default function Layout(): React.ReactElement {
                 onPress={() => navigateAndClose(m.route)}
                 style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.85 }]}
               >
-                <Feather
-                  name={m.icon as React.ComponentProps<typeof Feather>['name']}
-                  size={18}
-                  color="#374151"
-                />
+                <Feather name={m.icon as React.ComponentProps<typeof Feather>['name']} size={18} color="#374151" />
                 <Text style={styles.menuLabel}>{m.label}</Text>
               </Pressable>
             ))}
@@ -202,11 +221,7 @@ export default function Layout(): React.ReactElement {
                 onPress={() => navigateAndClose(m.route)}
                 style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.85 }]}
               >
-                <Feather
-                  name={m.icon as React.ComponentProps<typeof Feather>['name']}
-                  size={18}
-                  color="#374151"
-                />
+                <Feather name={m.icon as React.ComponentProps<typeof Feather>['name']} size={18} color="#374151" />
                 <Text style={styles.menuLabel}>{m.label}</Text>
               </Pressable>
             ))}
@@ -215,16 +230,8 @@ export default function Layout(): React.ReactElement {
 
             {/* Group: Logout */}
             {DANGER_ITEMS.map((m) => (
-              <Pressable
-                key={m.key}
-                onPress={() => navigateAndClose(m.route)}
-                style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.85 }]}
-              >
-                <Feather
-                  name={m.icon as React.ComponentProps<typeof Feather>['name']}
-                  size={18}
-                  color={m.destructive ? '#EF4444' : '#374151'}
-                />
+              <Pressable key={m.key} onPress={() => navigateAndClose(m.route)} style={({ pressed }) => [styles.menuRow, pressed && { opacity: 0.85 }]}>
+                <Feather name={m.icon as React.ComponentProps<typeof Feather>['name']} size={18} color={m.destructive ? '#EF4444' : '#374151'} />
                 <Text style={[styles.menuLabel, m.destructive && { color: '#EF4444' }]}>{m.label}</Text>
               </Pressable>
             ))}
