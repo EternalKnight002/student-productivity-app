@@ -27,12 +27,18 @@ export default function AboutScreen(): React.ReactElement {
 
         <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 18 }]}>About the app</Text>
         <Text style={[styles.p, { color: colors.muted }]}>
-          A lightweight productivity app for students — notes, planner and expenses in one place.
+         Your our all-in-one student productivity companion. Track expenses, plan tasks, take notes, and visualize your spending—all in one beautiful, lightweight app. Keep everything organized and private, right on your device.
         </Text>
 
         <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 14 }]}>License</Text>
         <Text style={[styles.p, { color: colors.muted }]}>
-          This is a demo project. Replace this text with your licence / credits.
+            Copyright 2025 Student Planner Contributors
+
+                Licensed under the Apache License, Version 2.0 (the "License");
+                you may not use this file except in compliance with the License.
+                You may obtain a copy of the License at
+
+            http://www.apache.org/licenses/LICENSE-2.0
         </Text>
 
         <View style={{ height: 18 }} />
