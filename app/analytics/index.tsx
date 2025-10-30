@@ -21,7 +21,6 @@ import { formatCurrency } from '../../src/utils/formatters';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-// ---------- MAIN COMPONENT ----------
 export default function AnalyticsScreen(): React.ReactElement {
   const router = useRouter();
   const colors = theme.colors;
@@ -45,34 +44,55 @@ export default function AnalyticsScreen(): React.ReactElement {
     return expenses.filter((e: any) => new Date(e.date ?? 0) >= since);
   }, [range, expenses]);
 
-  // --- chart data ---
+  // --- chart data (fixed + improved) ---
   const series = useMemo(() => {
     const map = new Map<string, number>();
     const days = range === 'all' ? 30 : Number(range);
+
+    // Fill map with last N days using ISO keys
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = d.toLocaleDateString();
+      const key = d.toISOString().split('T')[0];
       map.set(key, 0);
     }
+
+    // Aggregate totals per ISO date
     for (const e of filtered) {
-      const dateKey = e?.date ? new Date(e.date).toLocaleDateString() : new Date().toLocaleDateString();
-      if (map.has(dateKey)) {
-        map.set(dateKey, (map.get(dateKey) ?? 0) + Number(e.amount ?? 0));
+      const iso = e?.date ? new Date(e.date).toISOString().split('T')[0] : null;
+      if (iso && map.has(iso)) {
+        map.set(iso, (map.get(iso) ?? 0) + Number(e.amount ?? 0));
       }
     }
-    const labels = Array.from(map.keys());
-    const data = Array.from(map.values());
+
+    // Sort chronologically
+    const sorted = Array.from(map.entries()).sort(([a], [b]) => (a < b ? -1 : 1));
+    const labelsAll = sorted.map(([d]) => {
+      const date = new Date(d);
+      return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    });
+    const data = sorted.map(([, v]) => v);
+
+    // Limit label density for readability
+    const labelStep = days > 14 ? Math.ceil(days / 6) : 1;
+    const labels = labelsAll.map((l, i) => (i % labelStep === 0 ? l : ''));
+
     return { labels, data };
   }, [filtered, range]);
 
   // --- totals ---
-  const total = useMemo(() => filtered.reduce((a: number, e: any) => a + (Number(e.amount) || 0), 0), [filtered]);
+  const total = useMemo(
+    () => filtered.reduce((a: number, e: any) => a + (Number(e.amount) || 0), 0),
+    [filtered]
+  );
   const avg = filtered.length ? total / filtered.length : 0;
   const count = filtered.length;
 
   return (
-    <ScrollView style={[styles.page, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      style={[styles.page, { backgroundColor: colors.background }]}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
       {/* Header */}
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: colors.text }]}>Analytics</Text>
@@ -93,10 +113,18 @@ export default function AnalyticsScreen(): React.ReactElement {
             onPress={() => setRange(item.key)}
             style={[
               styles.rangeChip,
-              range === item.key && { backgroundColor: colors.primary + '22', borderColor: colors.primary },
+              range === item.key && {
+                backgroundColor: colors.primary + '22',
+                borderColor: colors.primary,
+              },
             ]}
           >
-            <Text style={[styles.rangeText, range === item.key && { color: colors.primary, fontWeight: '700' }]}>
+            <Text
+              style={[
+                styles.rangeText,
+                range === item.key && { color: colors.primary, fontWeight: '700' },
+              ]}
+            >
               {item.label}
             </Text>
           </Pressable>
@@ -117,14 +145,13 @@ export default function AnalyticsScreen(): React.ReactElement {
 
         {/* Chart */}
         <Card style={styles.chartCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Spending — {range === 'all' ? 'All Time' : `Last ${range} Days`}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Spending — {range === 'all' ? 'All Time' : `Last ${range} Days`}
+          </Text>
           {series.data.length ? (
             <LineChart
               data={{
-                labels: series.labels.map((l) => {
-                  const d = new Date(l);
-                  return isNaN(d.getTime()) ? l : d.toLocaleDateString(undefined, { weekday: 'short' });
-                }),
+                labels: series.labels,
                 datasets: [{ data: series.data }],
               }}
               width={Math.max(SCREEN_WIDTH - 64, 300)}
@@ -157,9 +184,13 @@ export default function AnalyticsScreen(): React.ReactElement {
                 <View style={[styles.catDot, { backgroundColor: c.color }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.catLabel, { color: colors.text }]}>{c.key}</Text>
-                  <Text style={[styles.catSub, { color: colors.muted }]}>{formatCurrency(c.total)}</Text>
+                  <Text style={[styles.catSub, { color: colors.muted }]}>
+                    {formatCurrency(c.total)}
+                  </Text>
                 </View>
-                <Text style={[styles.catAmount, { color: colors.text }]}>{formatCurrency(c.total)}</Text>
+                <Text style={[styles.catAmount, { color: colors.text }]}>
+                  {formatCurrency(c.total)}
+                </Text>
               </View>
             ))}
             {filtered.length === 0 && (
@@ -169,13 +200,17 @@ export default function AnalyticsScreen(): React.ReactElement {
         </Card>
 
         {/* Monthly detailed analytics card */}
-        <AnalyticsCard expenses={expenses} monthIso={new Date().toISOString().slice(0, 7)} style={{ marginTop: 16 }} />
+        <AnalyticsCard
+          expenses={expenses}
+          monthIso={new Date().toISOString().slice(0, 7)}
+          style={{ marginTop: 16 }}
+        />
       </View>
     </ScrollView>
   );
 }
 
-// ---------- SummaryCard (local small component) ----------
+// ---------- SummaryCard ----------
 function SummaryCard({ title, value }: { title: string; value: string }) {
   return (
     <Card style={styles.smallCard}>
@@ -185,7 +220,7 @@ function SummaryCard({ title, value }: { title: string; value: string }) {
   );
 }
 
-// ---------- HELPERS ----------
+// ---------- Helpers ----------
 function getTopCategories(expenses: any[]) {
   const map = new Map<string, number>();
   for (const e of expenses) {
@@ -193,14 +228,24 @@ function getTopCategories(expenses: any[]) {
     map.set(k, (map.get(k) ?? 0) + Number(e.amount ?? 0));
   }
   const palette = ['#2D9CDB', '#A78BFA', '#FB8C00', '#00C48C', '#FF7AA2', '#9E9E9E'];
-  const items = Array.from(map.entries()).map(([key, total], idx) => ({ key, total, color: palette[idx % palette.length] }));
+  const items = Array.from(map.entries()).map(([key, total], idx) => ({
+    key,
+    total,
+    color: palette[idx % palette.length],
+  }));
   items.sort((a, b) => b.total - a.total);
   return items.slice(0, 6);
 }
 
+// ---------- Styles ----------
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
   title: { fontSize: 22, fontWeight: '800' },
   headerAction: { padding: 8 },
 

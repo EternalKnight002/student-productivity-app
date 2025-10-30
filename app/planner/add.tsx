@@ -1,10 +1,20 @@
 // app/planner/add.tsx
-import React from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { useTaskStore } from '../../src/stores/useTaskStore';
 import { TaskPriority, TaskStatus } from '../../src/types/task';
 import { useRouter } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type FormValues = {
   title: string;
@@ -17,19 +27,23 @@ type FormValues = {
 };
 
 export default function AddTask() {
-  const { control, handleSubmit } = useForm<FormValues>({ defaultValues: { title: '', priority: 'medium', status: 'todo' } });
+  const { control, handleSubmit } = useForm<FormValues>({
+    defaultValues: { title: '', priority: 'medium', status: 'todo' },
+  });
   const addTask = useTaskStore((s) => s.addTask);
   const router = useRouter();
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const onSubmit = (data: FormValues) => {
     addTask({
       title: data.title,
       description: data.description,
-      dueDate: data.dueDate,
+      dueDate: selectedDate ? selectedDate.toISOString() : data.dueDate,
       remindAt: data.remindAt,
       course: data.course,
-      priority: (data.priority || 'medium'),
-      status: (data.status || 'todo'),
+      priority: data.priority || 'medium',
+      status: data.status || 'todo',
     });
     router.back();
   };
@@ -45,7 +59,12 @@ export default function AddTask() {
           name="title"
           rules={{ required: true, minLength: 1 }}
           render={({ field: { onChange, value } }) => (
-            <TextInput value={value} onChangeText={onChange} style={styles.input} placeholder="e.g. Finish assignment" />
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              style={styles.input}
+              placeholder="e.g. Finish assignment"
+            />
           )}
         />
 
@@ -54,29 +73,52 @@ export default function AddTask() {
           control={control}
           name="description"
           render={({ field: { onChange, value } }) => (
-            <TextInput value={value} onChangeText={onChange} style={[styles.input, { height: 100 }]} multiline placeholder="Notes..." />
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              style={[styles.input, { height: 100 }]}
+              multiline
+              placeholder="Notes..."
+            />
           )}
         />
 
-        <Text style={styles.label}>Due Date (ISO or YYYY-MM-DD)</Text>
-        <Controller
-          control={control}
-          name="dueDate"
-          render={({ field: { onChange, value } }) => (
-            <TextInput value={value} onChangeText={onChange} style={styles.input} placeholder="2025-12-31 or 2025-12-31T18:30:00.000Z" />
-          )}
-        />
+        <Text style={styles.label}>Due Date</Text>
+        <Pressable
+          onPress={() => setShowDatePicker(true)}
+          style={[styles.input, { justifyContent: 'center' }]}
+        >
+          <Text style={{ color: selectedDate ? '#000' : '#999' }}>
+            {selectedDate
+              ? selectedDate.toDateString()
+              : 'Select due date from calendar'}
+          </Text>
+        </Pressable>
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_, date) => {
+              setShowDatePicker(false);
+              if (date) setSelectedDate(date);
+            }}
+          />
+        )}
 
         <Text style={styles.label}>Course / Tag</Text>
         <Controller
           control={control}
           name="course"
           render={({ field: { onChange, value } }) => (
-            <TextInput value={value} onChangeText={onChange} style={styles.input} placeholder="e.g. CS101" />
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              style={styles.input}
+              placeholder="e.g. CS101"
+            />
           )}
         />
-
-        <View style={{ height: 16 }} />
 
         <Pressable onPress={handleSubmit(onSubmit)} style={styles.saveBtn}>
           <Text style={{ color: '#fff', fontWeight: '600' }}>Save task</Text>

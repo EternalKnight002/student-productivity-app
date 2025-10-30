@@ -1,226 +1,157 @@
 // app/notes/note/[id].tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Button, Alert, Modal, Image, TouchableOpacity } from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Image,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import RenderHtml from 'react-native-render-html';
+import { useWindowDimensions } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useNotesStore } from '../../../src/stores/useNotesStore';
-import { ImageGrid } from '../../../src/components/ImageGrid';
-import * as FileSystem from 'expo-file-system';
 import { Note } from '../../../src/types/note';
-import { WebView } from 'react-native-webview';
 
-type Params = { id: string };
-
-export default function NoteDetail(): React.ReactElement {
-  const { id } = useLocalSearchParams() as Params;
+export default function NoteDetail(): React.ReactElement | null {
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
-  const notes = useNotesStore(state => state.notes);
-  const deleteNote = useNotesStore(state => state.deleteNote);
-  const removeAttachment = useNotesStore(state => state.removeAttachment);
-  const [note, setNote] = useState<Note | undefined>(() => notes.find(n => n.id === id));
+  const note = useNotesStore((s) => s.notes.find((n) => n.id === id));
+  const deleteNote = useNotesStore((s) => s.deleteNote);
+  const removeAttachment = useNotesStore((s) => s.removeAttachment);
+
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string>('');
+  const { width } = useWindowDimensions();
 
-  useEffect(() => {
-    const foundNote = useNotesStore.getState().notes.find(n => n.id === id);
-    setNote(foundNote);
-    if (foundNote) {
-      prepareHtmlContent(foundNote);
-    }
-  }, [id]);
-
-  const prepareHtmlContent = async (currentNote: Note) => {
-    let bodyContent = currentNote.body || '<p>No content</p>';
-
-    // Convert local file:// URIs to base64 data URIs for WebView
-    const imgRegex = /<img[^>]+src="([^">]+)"/g;
-    let match;
-    const replacements: { original: string; replacement: string }[] = [];
-
-    while ((match = imgRegex.exec(bodyContent)) !== null) {
-      const imgSrc = match[1];
-      
-      // Check if it's a local file URI
-      if (imgSrc.startsWith('file://')) {
-        try {
-          const base64 = await FileSystem.readAsStringAsync(imgSrc, {
-            encoding: 'base64' as any,
+  const prepareHtmlContent = async (noteData: Note) => {
+    try {
+      let html = noteData.body ?? '';
+      for (const att of noteData.attachments || []) {
+        if (att.uri && (att.uri.endsWith('.jpg') || att.uri.endsWith('.png'))) {
+          const base64 = await FileSystem.readAsStringAsync(att.uri, {
+            encoding: 'base64',
           });
-          const dataUri = `data:image/jpeg;base64,${base64}`;
-          replacements.push({ original: imgSrc, replacement: dataUri });
-        } catch (error) {
-          console.warn('Failed to convert image to base64:', imgSrc, error);
+          const uri = `data:${att.mimeType};base64,${base64}`;
+          html = html.replace(att.uri, uri);
         }
       }
+      setHtmlContent(html);
+    } catch (e) {
+      console.error('prepareHtmlContent error', e);
     }
-
-    // Apply all replacements
-    let processedBody = bodyContent;
-    for (const { original, replacement } of replacements) {
-      processedBody = processedBody.replace(original, replacement);
-    }
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            padding: 16px;
-            margin: 0;
-            font-size: 16px;
-            line-height: 1.6;
-            color: #333;
-          }
-          img {
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin: 10px 0;
-            border-radius: 8px;
-          }
-          p {
-            margin: 0 0 12px 0;
-          }
-          ul, ol {
-            padding-left: 20px;
-            margin: 0 0 12px 0;
-          }
-          li {
-            margin-bottom: 6px;
-          }
-          div {
-            margin-bottom: 8px;
-          }
-        </style>
-      </head>
-      <body>
-        ${processedBody}
-      </body>
-      </html>
-    `;
-
-    setHtmlContent(html);
   };
 
-  if (!note) {
-    return (
-      <View style={styles.container}>
-        <Text>Note not found.</Text>
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (note) {
+      prepareHtmlContent(note);
+    } else {
+      setHtmlContent('');
+      router.replace('/notes');
+    }
+  }, [note, id]);
 
-  const handleDelete = async (): Promise<void> => {
-    Alert.alert('Delete note', 'Are you sure?', [
+  const handleDelete = async () => {
+    Alert.alert('Delete Note', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          for (const a of note.attachments ?? []) {
-            try {
-              const info = await FileSystem.getInfoAsync(a.uri);
-              if (info.exists) {
-                await FileSystem.deleteAsync(a.uri, { idempotent: true });
-              }
-            } catch (e) {
-              console.warn('delete file error', e);
-            }
-          }
-          await deleteNote(note.id);
-          router.push('/notes');
+          await deleteNote(id!);
+          router.replace('/notes');
         },
       },
     ]);
   };
 
-  const handleRemoveAttachment = async (attachmentId: string): Promise<void> => {
-    const att = note.attachments?.find(a => a.id === attachmentId);
-    if (att) {
-      try {
-        const info = await FileSystem.getInfoAsync(att.uri);
-        if (info.exists) {
-          await FileSystem.deleteAsync(att.uri, { idempotent: true });
-        }
-      } catch (e) {
-        console.warn('delete file', e);
-      }
-    }
+  const handleRemoveAttachment = async (attachmentId: string) => {
+    if (!note) return;
     await removeAttachment(note.id, attachmentId);
-    const updatedNote = useNotesStore.getState().notes.find(n => n.id === note.id);
-    setNote(updatedNote);
-    if (updatedNote) {
-      prepareHtmlContent(updatedNote);
-    }
+    const updated = useNotesStore.getState().notes.find((n) => n.id === note.id);
+    if (updated) prepareHtmlContent(updated);
+    else router.replace('/notes');
   };
 
+  if (!note) return null;
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{note.title || 'Untitled'}</Text>
-        <View style={styles.headerBtns}>
-          <Button title="Edit" onPress={() => router.push(`/notes/editor?id=${note.id}`)} />
-          <Button title="Delete" onPress={handleDelete} color="#FF5C5C" />
-        </View>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.title}>{note.title}</Text>
+        <RenderHtml contentWidth={width} source={{ html: htmlContent }} />
+        {note.attachments?.length ? (
+          <View style={styles.attachmentsContainer}>
+            {note.attachments.map((att) => (
+              // use id if present, fallback to uri so key is always defined
+              <TouchableOpacity
+                key={att.id ?? att.uri}
+                onPress={() => setPreviewUri(att.uri)}
+                onLongPress={() => handleRemoveAttachment(att.id)}
+              >
+                <Image source={{ uri: att.uri }} style={styles.attachmentImage} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.footerButton, { backgroundColor: '#007AFF' }]}
+          onPress={() => router.push(`/notes/editor?id=${note.id}`)}
+        >
+          <Text style={styles.footerButtonText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.footerButton, { backgroundColor: '#FF3B30' }]}
+          onPress={handleDelete}
+        >
+          <Text style={styles.footerButtonText}>Delete</Text>
+        </TouchableOpacity>
       </View>
 
-      {htmlContent ? (
-        <View style={styles.webviewContainer}>
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: htmlContent }}
-            style={styles.webview}
-            scrollEnabled={false}
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
-            allowFileAccess={true}
-            allowUniversalAccessFromFileURLs={true}
-            mixedContentMode="always"
-          />
-        </View>
-      ) : (
-        <View style={styles.loadingContainer}>
-          <Text>Loading content...</Text>
-        </View>
+      {previewUri && (
+        <TouchableOpacity
+          style={styles.previewOverlay}
+          onPress={() => setPreviewUri(null)}
+        >
+          <Image source={{ uri: previewUri }} style={styles.previewImage} />
+        </TouchableOpacity>
       )}
-
-      <Text style={[styles.label, { marginTop: 12 }]}>Attachments</Text>
-      <ImageGrid attachments={note.attachments} onRemove={handleRemoveAttachment} onPress={(uri: string) => setPreviewUri(uri)} />
-
-      <Modal visible={!!previewUri} transparent={false} onRequestClose={() => setPreviewUri(null)}>
-        <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
-          <TouchableOpacity style={{ position: 'absolute', top: 48, right: 20, zIndex: 10 }} onPress={() => setPreviewUri(null)}>
-            <Text style={{ color: 'white', fontSize: 20 }}>Close</Text>
-          </TouchableOpacity>
-          {previewUri ? <Image source={{ uri: previewUri }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} /> : null}
-        </View>
-      </Modal>
-    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { fontSize: 22, fontWeight: '700', flex: 1 },
-  headerBtns: { flexDirection: 'row', gap: 8 },
-  webviewContainer: { 
-    minHeight: 200,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    overflow: 'hidden',
+  scrollContent: { padding: 16 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 16 },
+  attachmentsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 16,
+    gap: 8,
   },
-  webview: { 
-    flex: 1,
-    backgroundColor: 'transparent',
+  attachmentImage: { width: 100, height: 100, borderRadius: 8 },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: '#ccc',
   },
-  loadingContainer: {
-    padding: 20,
+  footerButton: { paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8 },
+  footerButtonText: { color: '#fff', fontWeight: '600' },
+  previewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  label: { fontWeight: '600', fontSize: 14, marginTop: 16 },
+  previewImage: { width: '90%', height: '80%', resizeMode: 'contain' },
 });

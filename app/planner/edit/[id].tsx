@@ -1,13 +1,22 @@
 // app/planner/edit/[id].tsx
-import React, { useEffect } from 'react';
-import { SafeAreaView, ScrollView, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  Alert,
+  Platform,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { useTaskStore } from '../../../src/stores/useTaskStore';
 import { Task } from '../../../src/types/task';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Params = { id: string };
-
 type FormValues = {
   title: string;
   description?: string;
@@ -26,8 +35,18 @@ export default function EditTask() {
   const deleteTask = useTaskStore((s) => s.deleteTask);
 
   const { control, handleSubmit, reset } = useForm<FormValues>({
-    defaultValues: { title: '', description: '', dueDate: '', course: '', priority: 'medium', status: 'todo' },
+    defaultValues: {
+      title: '',
+      description: '',
+      dueDate: '',
+      course: '',
+      priority: 'medium',
+      status: 'todo',
+    },
   });
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
     if (task) {
@@ -40,12 +59,15 @@ export default function EditTask() {
         priority: task.priority,
         status: task.status,
       });
+      if (task.dueDate) setSelectedDate(new Date(task.dueDate));
     }
   }, [task, reset]);
 
   if (!task) {
     return (
-      <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <SafeAreaView
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+      >
         <Text>Task not found</Text>
       </SafeAreaView>
     );
@@ -55,8 +77,9 @@ export default function EditTask() {
     updateTask(task.id, {
       title: values.title,
       description: values.description,
-      dueDate: values.dueDate || undefined,
-      remindAt: values.remindAt || undefined,
+      dueDate: selectedDate
+        ? selectedDate.toISOString()
+        : values.dueDate || undefined,
       course: values.course,
       priority: (values.priority as any) || 'medium',
       status: (values.status as any) || 'todo',
@@ -88,28 +111,63 @@ export default function EditTask() {
           control={control}
           name="title"
           rules={{ required: true }}
-          render={({ field: { onChange, value } }) => <TextInput value={value} onChangeText={onChange} style={styles.input} />}
+          render={({ field: { onChange, value } }) => (
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              style={styles.input}
+            />
+          )}
         />
 
         <Text style={styles.label}>Description</Text>
         <Controller
           control={control}
           name="description"
-          render={({ field: { onChange, value } }) => <TextInput value={value} onChangeText={onChange} style={[styles.input, { height: 100 }]} multiline />}
+          render={({ field: { onChange, value } }) => (
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              style={[styles.input, { height: 100 }]}
+              multiline
+            />
+          )}
         />
 
         <Text style={styles.label}>Due Date</Text>
-        <Controller
-          control={control}
-          name="dueDate"
-          render={({ field: { onChange, value } }) => <TextInput value={value} onChangeText={onChange} style={styles.input} />}
-        />
+        <Pressable
+          onPress={() => setShowDatePicker(true)}
+          style={[styles.input, { justifyContent: 'center' }]}
+        >
+          <Text style={{ color: selectedDate ? '#000' : '#999' }}>
+            {selectedDate
+              ? selectedDate.toDateString()
+              : 'Select due date from calendar'}
+          </Text>
+        </Pressable>
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(_, date) => {
+              setShowDatePicker(false);
+              if (date) setSelectedDate(date);
+            }}
+          />
+        )}
 
         <Text style={styles.label}>Course</Text>
         <Controller
           control={control}
           name="course"
-          render={({ field: { onChange, value } }) => <TextInput value={value} onChangeText={onChange} style={styles.input} />}
+          render={({ field: { onChange, value } }) => (
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              style={styles.input}
+            />
+          )}
         />
 
         <Pressable onPress={handleSubmit(onSave)} style={styles.saveBtn}>
@@ -127,7 +185,19 @@ export default function EditTask() {
 const styles = StyleSheet.create({
   h1: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
   label: { marginTop: 8, marginBottom: 6, color: '#444' },
-  input: { backgroundColor: '#F7F8FB', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#EFEFF0' },
-  saveBtn: { marginTop: 20, backgroundColor: '#3751FF', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  input: {
+    backgroundColor: '#F7F8FB',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#EFEFF0',
+  },
+  saveBtn: {
+    marginTop: 20,
+    backgroundColor: '#3751FF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   deleteBtn: { marginTop: 12, alignItems: 'center' },
 });
